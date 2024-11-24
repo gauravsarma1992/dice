@@ -49,6 +49,9 @@ func (cmd *DiceDBCmd) Repr() string {
 
 // GetValue returns the last arg value
 func (cmd *DiceDBCmd) GetValue() string {
+	// TODO: This section treats the arg value at the end of the
+	// args array as the value. Revisit this to see if this requires
+	// change
 	value := cmd.Args[len(cmd.Args)-1]
 	return value
 }

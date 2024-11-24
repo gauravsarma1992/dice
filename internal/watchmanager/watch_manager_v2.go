@@ -98,11 +98,13 @@ func (wm *WatchManagerV2) CreateSession(cmd *cmd.DiceDBCmd) (session *WatchSessi
 		wm:        wm,
 		Cmd:       cmd,
 		displayer: DefaultDisplayer,
+		Status:    InitiatedSessionStatus,
 	}
 	wm.sessions = append(wm.sessions, session)
 	if err = session.CreateTree(); err != nil {
 		return
 	}
+	session.Status = ConnectedSessionStatus
 	return
 }
 
@@ -115,6 +117,7 @@ func (wm *WatchManagerV2) DeleteSession(session *WatchSession) (err error) {
 }
 
 func (session *WatchSession) Close() (err error) {
+	session.Status = TerminatedSessionStatus
 	if err = session.displayer.Close(); err != nil {
 		return
 	}
@@ -220,14 +223,15 @@ func (wm *WatchManagerV2) HandleWatchEvent(event *WatchEvent) (err error) {
 	var (
 		sessions []*WatchSession
 	)
-	// TODO: This section treats the arg value at the end of the
-	// args array as the value. Revisit this to see if this requires
-	// change
 
 	if sessions, err = wm.getEventMatchingSessions(event); err != nil {
 		return
 	}
 	for _, session := range sessions {
+		if session.Status != ConnectedSessionStatus {
+			log.Println("Skipping sending to session because it's in status", session.Status)
+			continue
+		}
 		if err = session.send(event.EventCmd.GetValue()); err != nil {
 			log.Println("error in sending event to session with ID", session.ID, "with err", err)
 			continue
