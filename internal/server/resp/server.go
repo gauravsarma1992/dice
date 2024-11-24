@@ -46,7 +46,7 @@ type Server struct {
 	connBacklogSize          int
 	workerManager            *worker.WorkerManager
 	shardManager             *shard.ShardManager
-	watchManager             *watchmanager.Manager
+	watchManager             *watchmanager.WatchManager
 	cmdWatchSubscriptionChan chan watchmanager.WatchSubscription
 	globalErrorChan          chan error
 	wl                       wal.AbstractWAL

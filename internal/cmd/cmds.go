@@ -47,7 +47,23 @@ func (cmd *DiceDBCmd) Repr() string {
 	return fmt.Sprintf("%s %s", cmd.Cmd, strings.Join(cmd.Args, " "))
 }
 
+// GetValue returns the last arg value
+func (cmd *DiceDBCmd) GetValue() string {
+	// TODO: This section treats the arg value at the end of the
+	// args array as the value. Revisit this to see if this requires
+	// change
+	value := cmd.Args[len(cmd.Args)-1]
+	return value
+}
+
+// Get string representation without the value
+func (cmd *DiceDBCmd) GetReprWithoutValue() (value string) {
+	value = fmt.Sprintf("%s %s", cmd.Cmd, strings.Join(cmd.Args[:len(cmd.Args)-1], " "))
+	return
+}
+
 // GetFingerprint returns a 32-bit fingerprint of the command and its arguments.
+// OPTIMIZE - Maybe a tree based approach here instead of flat tree
 func (cmd *DiceDBCmd) GetFingerprint() uint32 {
 	return farm.Fingerprint32([]byte(cmd.Repr()))
 }

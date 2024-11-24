@@ -17,7 +17,13 @@ type (
 		Fingerprint  uint32              // Fingerprint is a unique identifier for each watch artifact, only populated for unsubscriptions.
 	}
 
-	Manager struct {
+	WatchSubscriptionConnection struct {
+		tcpConn chan *cmd.DiceDBCmd
+		inpCh   chan *cmd.DiceDBCmd
+		outCh   chan string
+	}
+
+	WatchManager struct {
 		querySubscriptionMap     map[string]map[uint32]struct{}              // querySubscriptionMap is a map of Key -> [fingerprint1, fingerprint2, ...]
 		tcpSubscriptionMap       map[uint32]map[chan *cmd.DiceDBCmd]struct{} // tcpSubscriptionMap is a map of fingerprint -> [client1Chan, client2Chan, ...]
 		fingerprintCmdMap        map[uint32]*cmd.DiceDBCmd                   // fingerprintCmdMap is a map of fingerprint -> DiceDBCmd
@@ -37,8 +43,8 @@ var (
 	}
 )
 
-func NewManager(cmdWatchSubscriptionChan chan WatchSubscription, cmdWatchChan chan dstore.CmdWatchEvent) *Manager {
-	return &Manager{
+func NewManager(cmdWatchSubscriptionChan chan WatchSubscription, cmdWatchChan chan dstore.CmdWatchEvent) *WatchManager {
+	return &WatchManager{
 		querySubscriptionMap:     make(map[string]map[uint32]struct{}),
 		tcpSubscriptionMap:       make(map[uint32]map[chan *cmd.DiceDBCmd]struct{}),
 		fingerprintCmdMap:        make(map[uint32]*cmd.DiceDBCmd),
@@ -48,7 +54,7 @@ func NewManager(cmdWatchSubscriptionChan chan WatchSubscription, cmdWatchChan ch
 }
 
 // Run starts the watch manager, listening for subscription requests and events
-func (m *Manager) Run(ctx context.Context) {
+func (m *WatchManager) Run(ctx context.Context) {
 	var wg sync.WaitGroup
 
 	wg.Add(1)
@@ -62,7 +68,7 @@ func (m *Manager) Run(ctx context.Context) {
 	wg.Wait()
 }
 
-func (m *Manager) listenForEvents(ctx context.Context) {
+func (m *WatchManager) listenForEvents(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -80,7 +86,7 @@ func (m *Manager) listenForEvents(ctx context.Context) {
 }
 
 // handleSubscription processes a new subscription request
-func (m *Manager) handleSubscription(sub WatchSubscription) {
+func (m *WatchManager) handleSubscription(sub WatchSubscription) {
 	fingerprint := sub.WatchCmd.GetFingerprint()
 	key := sub.WatchCmd.GetKey()
 
@@ -101,7 +107,7 @@ func (m *Manager) handleSubscription(sub WatchSubscription) {
 }
 
 // handleUnsubscription processes an unsubscription request
-func (m *Manager) handleUnsubscription(sub WatchSubscription) {
+func (m *WatchManager) handleUnsubscription(sub WatchSubscription) {
 	fingerprint := sub.Fingerprint
 
 	// Remove clientID from tcpSubscriptionMap
@@ -130,7 +136,7 @@ func (m *Manager) handleUnsubscription(sub WatchSubscription) {
 	}
 }
 
-func (m *Manager) handleWatchEvent(event dstore.CmdWatchEvent) {
+func (m *WatchManager) handleWatchEvent(event dstore.CmdWatchEvent) {
 	// Check if any watch commands are listening to updates on this key.
 	fingerprints, exists := m.querySubscriptionMap[event.AffectedKey]
 	if !exists {
@@ -158,7 +164,7 @@ func (m *Manager) handleWatchEvent(event dstore.CmdWatchEvent) {
 }
 
 // notifyClients sends cmd to all clients listening to this fingerprint, so that they can execute it.
-func (m *Manager) notifyClients(fingerprint uint32, diceDBCmd *cmd.DiceDBCmd) {
+func (m *WatchManager) notifyClients(fingerprint uint32, diceDBCmd *cmd.DiceDBCmd) {
 	clients, exists := m.tcpSubscriptionMap[fingerprint]
 	if !exists {
 		slog.Warn("No clients found for fingerprint",
