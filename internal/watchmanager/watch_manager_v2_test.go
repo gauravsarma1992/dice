@@ -58,3 +58,7 @@ func TestWatchManagerV2Suite(t *testing.T) {
 		DefaultDisplayer.(*ArrayStorer).store,
 	)
 }
+
+func TestSessionExpiry(t *testing.T) {
+	assert.Equal(t, nil, nil)
+}

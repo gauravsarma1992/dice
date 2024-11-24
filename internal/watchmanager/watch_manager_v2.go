@@ -3,6 +3,7 @@ package watchmanager
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/dicedb/dice/internal/cmd"
 )
@@ -12,6 +13,8 @@ const (
 	ConnectedSessionStatus
 	HungSessionStatus
 	TerminatedSessionStatus
+
+	SessionHungDurationThresholdInSecs = 120
 )
 
 type (
@@ -26,14 +29,15 @@ type (
 		// Each WATCH command opens a WatchSession with the
 		// required filters.
 
-		// TODO implement this
-		ID        uint32
+		ID        int64
 		Cmd       *cmd.DiceDBCmd
 		wm        *WatchManagerV2
 		nodes     []*WatchNode
 		displayer Displayer
 
 		Status uint8
+
+		lastAccessedAt time.Time
 	}
 
 	WatchNode struct {
@@ -95,6 +99,7 @@ func (wm *WatchManagerV2) createRootNode() (node *WatchNode, err error) {
 // =========================== Session =============================
 func (wm *WatchManagerV2) CreateSession(cmd *cmd.DiceDBCmd) (session *WatchSession, err error) {
 	session = &WatchSession{
+		ID:        time.Now().UnixNano(),
 		wm:        wm,
 		Cmd:       cmd,
 		displayer: DefaultDisplayer,
@@ -129,6 +134,15 @@ func (session *WatchSession) Close() (err error) {
 
 // TODO: implement this
 func (session *WatchSession) removeNodeRefs() (err error) {
+	return
+}
+
+func (session *WatchSession) IsActive() (isActive bool) {
+	if time.Now().UTC().Sub(session.lastAccessedAt).Seconds() > SessionHungDurationThresholdInSecs {
+		session.Status = HungSessionStatus
+		isActive = false
+	}
+	isActive = true
 	return
 }
 
@@ -228,6 +242,7 @@ func (wm *WatchManagerV2) HandleWatchEvent(event *WatchEvent) (err error) {
 		return
 	}
 	for _, session := range sessions {
+		session.lastAccessedAt = time.Now().UTC()
 		if session.Status != ConnectedSessionStatus {
 			log.Println("Skipping sending to session because it's in status", session.Status)
 			continue
@@ -237,5 +252,22 @@ func (wm *WatchManagerV2) HandleWatchEvent(event *WatchEvent) (err error) {
 			continue
 		}
 	}
+	return
+}
+
+func (wm *WatchManagerV2) RemoveUnusedSessions() (removedCount int, err error) {
+	for _, session := range wm.sessions {
+		if session.Status == TerminatedSessionStatus || !session.IsActive() {
+			if err = wm.DeleteSession(session); err != nil {
+				log.Println("error in deleting session", session)
+				continue
+			}
+		}
+	}
+	return
+}
+
+func (wm *WatchManagerV2) Run() (err error) {
+	wm.RemoveUnusedSessions()
 	return
 }
