@@ -3,6 +3,7 @@ package watchmanager
 import (
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/dicedb/dice/internal/cmd"
@@ -21,6 +22,7 @@ type (
 	WatchManagerV2 struct {
 		sessions []*WatchSession
 		root     *WatchNode
+		sLock    *sync.RWMutex
 	}
 
 	WatchSession struct {
@@ -59,6 +61,8 @@ type (
 		// All matching sessions are stored in the Sessions slice. Whenever an event ends
 		// at a WatchNode, the event should be sent to all the Sessions at that specific node.
 		Sessions []*WatchSession
+
+		nLock *sync.RWMutex
 	}
 
 	WatchEvent struct {
@@ -82,7 +86,9 @@ var (
 )
 
 func NewWatchManager() (wm *WatchManagerV2, err error) {
-	wm = &WatchManagerV2{}
+	wm = &WatchManagerV2{
+		sLock: &sync.RWMutex{},
+	}
 	if wm.root, err = wm.createRootNode(); err != nil {
 		return
 	}
@@ -105,15 +111,19 @@ func (wm *WatchManagerV2) CreateSession(cmd *cmd.DiceDBCmd) (session *WatchSessi
 		displayer: DefaultDisplayer,
 		Status:    InitiatedSessionStatus,
 	}
-	wm.sessions = append(wm.sessions, session)
+
 	if err = session.CreateTree(); err != nil {
 		return
 	}
 	session.Status = ConnectedSessionStatus
+
+	wm.sLock.Lock()
+	defer wm.sLock.Unlock()
+	wm.sessions = append(wm.sessions, session)
+
 	return
 }
 
-// TODO: implement this
 func (wm *WatchManagerV2) DeleteSession(session *WatchSession) (err error) {
 	if err = session.Close(); err != nil {
 		return
@@ -134,6 +144,14 @@ func (session *WatchSession) Close() (err error) {
 
 // TODO: implement this
 func (session *WatchSession) removeNodeRefs() (err error) {
+	for _, node := range session.nodes {
+		if node.removeSession(session); err != nil {
+			return
+		}
+		if node.RefCount != 0 {
+			return
+		}
+	}
 	return
 }
 
@@ -178,6 +196,7 @@ func (session *WatchSession) CreateOrGetNode(parentNode *WatchNode, val int) (no
 		Parent:   parentNode,
 		Value:    val,
 		RefCount: 1,
+		nLock:    &sync.RWMutex{},
 	}
 	parentNode.Children = append(parentNode.Children, node)
 	return
@@ -187,6 +206,23 @@ func (session *WatchSession) send(val string) (err error) {
 	if err = session.displayer.Display(val); err != nil {
 		return
 	}
+	return
+}
+
+func (node *WatchNode) removeSession(session *WatchSession) (err error) {
+	matchingIdx := -1
+
+	node.nLock.Lock()
+	defer node.nLock.Unlock()
+
+	node.RefCount -= 1
+	for idx, availableSession := range node.Sessions {
+		if availableSession.ID == session.ID {
+			matchingIdx = idx
+			break
+		}
+	}
+	node.Sessions = append(node.Sessions[:matchingIdx], node.Sessions[matchingIdx+1:]...)
 	return
 }
 
@@ -229,6 +265,9 @@ func (wm *WatchManagerV2) getEventMatchingSessions(event *WatchEvent) (sessions 
 	if matchingNode, err = wm.getEventMatchingNode(event.EventCmd); err != nil {
 		return
 	}
+	matchingNode.nLock.RLock()
+	defer matchingNode.nLock.RUnlock()
+
 	sessions = matchingNode.Sessions
 	return
 }
@@ -237,6 +276,8 @@ func (wm *WatchManagerV2) HandleWatchEvent(event *WatchEvent) (err error) {
 	var (
 		sessions []*WatchSession
 	)
+	wm.sLock.RLock()
+	defer wm.sLock.RUnlock()
 
 	if sessions, err = wm.getEventMatchingSessions(event); err != nil {
 		return
@@ -256,6 +297,12 @@ func (wm *WatchManagerV2) HandleWatchEvent(event *WatchEvent) (err error) {
 }
 
 func (wm *WatchManagerV2) RemoveUnusedSessions() (removedCount int, err error) {
+	var (
+		activeSessions []*WatchSession
+	)
+	wm.sLock.Lock()
+	defer wm.sLock.Unlock()
+
 	for _, session := range wm.sessions {
 		if session.Status == TerminatedSessionStatus || !session.IsActive() {
 			if err = wm.DeleteSession(session); err != nil {
@@ -263,7 +310,9 @@ func (wm *WatchManagerV2) RemoveUnusedSessions() (removedCount int, err error) {
 				continue
 			}
 		}
+		activeSessions = append(activeSessions, session)
 	}
+	wm.sessions = activeSessions
 	return
 }
 
