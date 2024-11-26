@@ -16,7 +16,7 @@ func GetDefaultWatchManager() (wm *WatchManagerV2) {
 	return
 }
 
-func TriggerWatchEvent(wm *WatchManagerV2, eventCmd *cmd.DiceDBCmd) (err error) {
+func triggerWatchEvent(wm *WatchManagerV2, eventCmd *cmd.DiceDBCmd) (err error) {
 	weOne := &WatchEvent{
 		EventCmd: eventCmd,
 	}
@@ -34,20 +34,20 @@ func TestWatchManagerV2Suite(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, sessOne)
 
-	err = TriggerWatchEvent(wm, &cmd.DiceDBCmd{
+	err = triggerWatchEvent(wm, &cmd.DiceDBCmd{
 		Cmd:  "GET.WATCH",
 		Args: []string{"argOne", "this should appear"},
 	})
 	assert.Nil(t, err)
 
-	err = TriggerWatchEvent(wm, &cmd.DiceDBCmd{
+	err = triggerWatchEvent(wm, &cmd.DiceDBCmd{
 		Cmd:  "GET.WATCH",
 		Args: []string{"argTwo", "this should not appear"},
 	})
 	// Error should be raised since it doesn't match
 	assert.NotNil(t, err)
 
-	err = TriggerWatchEvent(wm, &cmd.DiceDBCmd{
+	err = triggerWatchEvent(wm, &cmd.DiceDBCmd{
 		Cmd:  "GET.WATCH",
 		Args: []string{"argOne", "this should appear again"},
 	})
