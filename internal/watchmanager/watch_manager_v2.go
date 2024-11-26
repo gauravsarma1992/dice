@@ -50,6 +50,8 @@ type (
 		// For example: if user provides "GET.WATCH fin1" as
 		// an input, then the entire command is stored as multiple WatchNode
 		// instances as "G -> E -> T -> . -> W -> A -> T -> C -> H -> F -> I -> N -> 1"
+		ID int64
+
 		Value    int
 		RefCount int
 
@@ -97,6 +99,7 @@ func NewWatchManager() (wm *WatchManagerV2, err error) {
 
 func (wm *WatchManagerV2) createRootNode() (node *WatchNode, err error) {
 	node = &WatchNode{
+		ID:    0,
 		Value: 0, // the slash doesn't have any significance
 	}
 	return
@@ -146,10 +149,10 @@ func (session *WatchSession) Close() (err error) {
 func (session *WatchSession) removeNodeRefs() (err error) {
 	for _, node := range session.nodes {
 		if node.removeSession(session); err != nil {
-			return
+			continue
 		}
 		if node.RefCount != 0 {
-			return
+			continue
 		}
 	}
 	return
@@ -193,6 +196,7 @@ func (session *WatchSession) CreateOrGetNode(parentNode *WatchNode, val int) (no
 		return
 	}
 	node = &WatchNode{
+		ID:       time.Now().UnixNano(),
 		Parent:   parentNode,
 		Value:    val,
 		RefCount: 1,
@@ -232,6 +236,36 @@ func (node *WatchNode) hasChildWithValue(val int) (matchingNode *WatchNode, isPr
 			matchingNode = child
 			isPresent = true
 		}
+	}
+	return
+}
+
+func (node *WatchNode) removeChildren(children []*WatchNode) (err error) {
+	var (
+		availableChildren []*WatchNode
+	)
+	for _, toDeleteNode := range children {
+		for _, childNode := range node.Children {
+			if toDeleteNode.ID == childNode.ID {
+				continue
+			}
+			availableChildren = append(availableChildren, childNode)
+		}
+	}
+	node.nLock.Lock()
+	defer node.nLock.Unlock()
+
+	node.Children = availableChildren
+
+	return
+}
+
+func (node *WatchNode) Delete() (err error) {
+	if err = node.Parent.removeChildren([]*WatchNode{node}); err != nil {
+		return
+	}
+	if err = node.removeChildren(node.Children); err != nil {
+		return
 	}
 	return
 }
@@ -279,6 +313,7 @@ func (wm *WatchManagerV2) HandleWatchEvent(event *WatchEvent) (err error) {
 	wm.sLock.RLock()
 	defer wm.sLock.RUnlock()
 
+	// TODO: Translate event cmd to matching commands
 	if sessions, err = wm.getEventMatchingSessions(event); err != nil {
 		return
 	}
