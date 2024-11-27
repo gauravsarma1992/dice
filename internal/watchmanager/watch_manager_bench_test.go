@@ -2,7 +2,6 @@ package watchmanager
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -19,13 +18,13 @@ func getDefaultWatchManager() (wm *WatchManager) {
 	return
 }
 
-func createTestNodes(wm *WatchManager, count int) {
+func createTestNodes(wm *WatchManager, cliCh chan *cmd.DiceDBCmd, count int) {
 	for idx := 0; idx < count; idx++ {
 		subs := WatchSubscription{
 			Subscribe:    true,
-			AdhocReqChan: make(chan *cmd.DiceDBCmd),
+			AdhocReqChan: cliCh,
 			WatchCmd: &cmd.DiceDBCmd{
-				Cmd:  "GET.WATCH",
+				Cmd:  "GET",
 				Args: []string{getTestNodeVal(idx)},
 			},
 			Fingerprint: 0,
@@ -43,12 +42,11 @@ func triggerWatchEvent(wm *WatchManager, eventCmd *cmd.DiceDBCmd) (err error) {
 	return
 }
 
-func readInputFromCh(ctx context.Context, inpCh chan string, outStr *[]string) {
+func readInputFromCh(ctx context.Context, inpCh chan *cmd.DiceDBCmd, outStr *[]string) {
 	for {
 		select {
-		case res := <-inpCh:
-			fmt.Println(res)
-			*outStr = append(*outStr, res)
+		case <-inpCh:
+			*outStr = append(*outStr, "some str")
 		case <-ctx.Done():
 			return
 		}
@@ -60,25 +58,27 @@ func runBenchmarkForCardinality(b *testing.B, count int) {
 	outStr := []string{}
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
-	go readInputFromCh(ctx, DefaultDisplayer.(*ChannelSender).inpCh, &outStr)
+	cliCh := make(chan *cmd.DiceDBCmd, 1000)
+
+	go readInputFromCh(ctx, cliCh, &outStr)
 	time.Sleep(1 * time.Second)
 
 	wm := getDefaultWatchManager()
-	createTestNodes(wm, count)
+	createTestNodes(wm, cliCh, count)
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		triggerWatchEvent(wm, &cmd.DiceDBCmd{
-			Cmd:  "GET.WATCH",
+			Cmd:  "SET.WATCH",
 			Args: []string{getTestNodeVal(count / 2), "this should appear again"},
 		})
 		triggerWatchEvent(wm, &cmd.DiceDBCmd{
-			Cmd:  "GET.WATCH",
+			Cmd:  "SET.WATCH",
 			Args: []string{getTestNodeVal(1), "this should appear again"},
 		})
 		triggerWatchEvent(wm, &cmd.DiceDBCmd{
-			Cmd:  "GET.WATCH",
+			Cmd:  "SET.WATCH",
 			Args: []string{getTestNodeVal(count - 1), "this should appear again"},
 		})
 	}
