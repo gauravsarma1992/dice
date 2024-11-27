@@ -10,12 +10,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func GetDefaultWatchManager() (wm *WatchManagerV2) {
-	wm, _ = NewWatchManager()
+func getDefaultWatchManagerV2() (wm *WatchManagerV2) {
+	wm, _ = NewWatchManagerV2()
 	return
 }
 
-func triggerWatchEvent(wm *WatchManagerV2, eventCmd *cmd.DiceDBCmd) (err error) {
+func triggerWatchEventV2(wm *WatchManagerV2, eventCmd *cmd.DiceDBCmd) (err error) {
 	weOne := &WatchEvent{
 		EventCmd: eventCmd,
 	}
@@ -26,7 +26,7 @@ func triggerWatchEvent(wm *WatchManagerV2, eventCmd *cmd.DiceDBCmd) (err error) 
 	return
 }
 
-func readInputFromCh(ctx context.Context, inpCh chan string, outStr *[]string) {
+func readInputFromChV2(ctx context.Context, inpCh chan string, outStr *[]string) {
 	for {
 		select {
 		case res := <-inpCh:
@@ -42,10 +42,10 @@ func TestWatchManagerV2Suite(t *testing.T) {
 	outStr := []string{}
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
-	go readInputFromCh(ctx, DefaultDisplayer.(*ChannelSender).inpCh, &outStr)
+	go readInputFromChV2(ctx, DefaultDisplayer.(*ChannelSender).inpCh, &outStr)
 	time.Sleep(1 * time.Second)
 
-	wm := GetDefaultWatchManager()
+	wm := getDefaultWatchManagerV2()
 	watchCmdOne := &cmd.DiceDBCmd{
 		Cmd:  "GET.WATCH",
 		Args: []string{"argOne"},
@@ -54,20 +54,20 @@ func TestWatchManagerV2Suite(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, sessOne)
 
-	err = triggerWatchEvent(wm, &cmd.DiceDBCmd{
+	err = triggerWatchEventV2(wm, &cmd.DiceDBCmd{
 		Cmd:  "GET.WATCH",
 		Args: []string{"argOne", "this should appear"},
 	})
 	assert.Nil(t, err)
 
-	err = triggerWatchEvent(wm, &cmd.DiceDBCmd{
+	err = triggerWatchEventV2(wm, &cmd.DiceDBCmd{
 		Cmd:  "GET.WATCH",
 		Args: []string{"argTwo", "this should not appear"},
 	})
 	// Error should be raised since it doesn't match
 	assert.NotNil(t, err)
 
-	err = triggerWatchEvent(wm, &cmd.DiceDBCmd{
+	err = triggerWatchEventV2(wm, &cmd.DiceDBCmd{
 		Cmd:  "GET.WATCH",
 		Args: []string{"argOne", "this should appear again"},
 	})
@@ -79,8 +79,4 @@ func TestWatchManagerV2Suite(t *testing.T) {
 		[]string{"this should appear", "this should appear again"},
 		outStr,
 	)
-}
-
-func TestSessionExpiry(t *testing.T) {
-	assert.Equal(t, nil, nil)
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/dicedb/dice/internal/cmd"
 )
 
-func createTestNodes(wm *WatchManagerV2, count int) {
+func createTestNodesV2(wm *WatchManagerV2, count int) {
 	for idx := 0; idx < count; idx++ {
 		watchCmdOne := &cmd.DiceDBCmd{
 			Cmd: "GET.WATCH",
@@ -21,28 +21,28 @@ func createTestNodes(wm *WatchManagerV2, count int) {
 	}
 }
 
-func runBenchmarkForCardinality(b *testing.B, count int) {
+func runBenchmarkForCardinalityV2(b *testing.B, count int) {
 	outStr := []string{}
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
-	go readInputFromCh(ctx, DefaultDisplayer.(*ChannelSender).inpCh, &outStr)
+	go readInputFromChV2(ctx, DefaultDisplayer.(*ChannelSender).inpCh, &outStr)
 	time.Sleep(1 * time.Second)
 
-	wm := GetDefaultWatchManager()
-	createTestNodes(wm, count)
+	wm := getDefaultWatchManagerV2()
+	createTestNodesV2(wm, count)
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		triggerWatchEvent(wm, &cmd.DiceDBCmd{
+		triggerWatchEventV2(wm, &cmd.DiceDBCmd{
 			Cmd:  "GET.WATCH",
 			Args: []string{getTestNodeVal(count / 2), "this should appear again"},
 		})
-		triggerWatchEvent(wm, &cmd.DiceDBCmd{
+		triggerWatchEventV2(wm, &cmd.DiceDBCmd{
 			Cmd:  "GET.WATCH",
 			Args: []string{getTestNodeVal(1), "this should appear again"},
 		})
-		triggerWatchEvent(wm, &cmd.DiceDBCmd{
+		triggerWatchEventV2(wm, &cmd.DiceDBCmd{
 			Cmd:  "GET.WATCH",
 			Args: []string{getTestNodeVal(count - 1), "this should appear again"},
 		})
@@ -58,14 +58,14 @@ func getTestNodeVal(count int) (val string) {
 	return
 }
 
-func BenchmarkKeysWithHighCardinalityBreadthWise(b *testing.B) {
-	runBenchmarkForCardinality(b, 100000)
+func BenchmarkKeysWithHighCardinalityBreadthWiseV2(b *testing.B) {
+	runBenchmarkForCardinalityV2(b, 100000)
 }
 
-func BenchmarkKeysWithHighCardinalityDepthWise(b *testing.B) {
-	runBenchmarkForCardinality(b, 1000)
+func BenchmarkKeysWithHighCardinalityDepthWiseV2(b *testing.B) {
+	runBenchmarkForCardinalityV2(b, 1000)
 }
 
-func BenchmarkKeysWithLowCardinality(b *testing.B) {
-	runBenchmarkForCardinality(b, 10)
+func BenchmarkKeysWithLowCardinalityV2(b *testing.B) {
+	runBenchmarkForCardinalityV2(b, 10)
 }

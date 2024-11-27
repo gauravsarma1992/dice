@@ -87,7 +87,7 @@ var (
 	DefaultDisplayer Displayer = NewChannelSender()
 )
 
-func NewWatchManager() (wm *WatchManagerV2, err error) {
+func NewWatchManagerV2() (wm *WatchManagerV2, err error) {
 	wm = &WatchManagerV2{
 		sLock: &sync.RWMutex{},
 	}
