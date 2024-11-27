@@ -1,8 +1,10 @@
 package watchmanager
 
 import (
+	"context"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/dicedb/dice/internal/cmd"
 )
@@ -20,6 +22,12 @@ func createTestNodes(wm *WatchManagerV2, count int) {
 }
 
 func runBenchmarkForCardinality(b *testing.B, count int) {
+	outStr := []string{}
+	ctx, cancelFunc := context.WithCancel(context.Background())
+
+	go readInputFromCh(ctx, DefaultDisplayer.(*ChannelSender).inpCh, &outStr)
+	time.Sleep(1 * time.Second)
+
 	wm := GetDefaultWatchManager()
 	createTestNodes(wm, count)
 
@@ -39,6 +47,10 @@ func runBenchmarkForCardinality(b *testing.B, count int) {
 			Args: []string{getTestNodeVal(count - 1), "this should appear again"},
 		})
 	}
+
+	b.StopTimer()
+	cancelFunc()
+
 }
 
 func getTestNodeVal(count int) (val string) {

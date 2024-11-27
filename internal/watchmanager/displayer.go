@@ -17,7 +17,7 @@ type (
 
 func NewChannelSender() (displayer Displayer) {
 	displayer = &ChannelSender{
-		inpCh: make(chan string),
+		inpCh: make(chan string, 1000),
 	}
 	return
 }
