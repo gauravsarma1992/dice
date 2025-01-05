@@ -68,7 +68,6 @@ func (transportManager *TransportManager) AddTransportClient(nodeID NodeID, tran
 	defer transportManager.clientLock.Unlock()
 
 	transportManager.transportClients[nodeID] = transport
-
 	return
 }
 
@@ -81,7 +80,6 @@ func (transportManager *TransportManager) GetTransportClient(nodeID NodeID) (tra
 		err = ErrTransportClientNotFoundError
 		return
 	}
-
 	return
 }
 

@@ -2,8 +2,6 @@ package replication
 
 import (
 	"context"
-
-	"log"
 )
 
 const (
@@ -62,11 +60,8 @@ func (replMgr *ReplicationManager) StartBootstrapPhase() (err error) {
 	if discoveredNodes, err = replMgr.localNode.ConnectToRemoteNode(); err != nil {
 		return
 	}
-	for _, node := range discoveredNodes {
-		if err = replMgr.cluster.AddNode(node); err != nil {
-			log.Printf("unable to add node %d to the cluster", node.ID)
-			continue
-		}
+	if err = replMgr.cluster.Update(discoveredNodes); err != nil {
+		return
 	}
 	return
 }
