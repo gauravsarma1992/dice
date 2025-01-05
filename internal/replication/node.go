@@ -102,7 +102,12 @@ func (node *Node) ConnectToRemoteNode() (nodes []*Node, err error) {
 	if remoteNodeID, err = node.transportManager.ConvertIpToNode(node.config.RemoteHost); err != nil {
 		return
 	}
-	clusterDiscoveryMsg := NewMessage(InfoMessageGroup, node.ID, remoteNodeID, nil)
+	clusterDiscoveryMsg := NewMessage(
+		InfoMessageGroup,
+		node.ID,
+		remoteNodeID,
+		&ClusterDiscoveryRequest{Node: node},
+	)
 	if respMsg, err = node.transportManager.Send(clusterDiscoveryMsg); err != nil {
 		return
 	}

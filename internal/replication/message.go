@@ -27,6 +27,7 @@ type (
 		Value interface{}
 	}
 
+	// ClusterDiscovery
 	ClusterDiscoveryRequest struct {
 		Node *Node
 	}
