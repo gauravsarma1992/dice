@@ -19,6 +19,8 @@ type (
 		transportClients map[NodeID]Transport
 		ipToNodeStore    map[string]NodeID
 
+		msgHandlers map[MessageTypeT]MessageHandler
+
 		clientLock *sync.RWMutex
 	}
 )
@@ -30,6 +32,16 @@ func NewTransportManager(ctx context.Context) (transportManager *TransportManage
 		ipToNodeStore:    make(map[string]NodeID, 10),
 		clientLock:       &sync.RWMutex{},
 	}
+	if err = transportManager.setupMsgHandlers(); err != nil {
+		return
+	}
+	return
+}
+
+func (transportManager *TransportManager) setupMsgHandlers() (err error) {
+	replMgr := transportManager.ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
+	transportManager.msgHandlers[PingMessageType] = replMgr.PingHandler
+	transportManager.msgHandlers[ClusterDiscoveryMessageType] = replMgr.ClusterDiscoveryHandler
 	return
 }
 
