@@ -104,6 +104,7 @@ func (node *Node) ConnectToRemoteNode() (nodes []*Node, err error) {
 	}
 	clusterDiscoveryMsg := NewMessage(
 		InfoMessageGroup,
+		ClusterDiscoveryMessageType,
 		node.ID,
 		remoteNodeID,
 		&ClusterDiscoveryRequest{Node: node},
