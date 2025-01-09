@@ -37,6 +37,14 @@ type (
 		Value interface{}
 	}
 
+	// PingMessage
+	PingRequest struct {
+		Node *Node
+	}
+	PingResponse struct {
+		NodeID NodeID
+	}
+
 	// ClusterDiscovery
 	ClusterDiscoveryRequest struct {
 		Node *Node
@@ -69,7 +77,7 @@ func (replMgr *ReplicationManager) PingHandler(reqMsg *Message) (respMsg *Messag
 		PingMessageType,
 		reqMsg.RemoteNodeID,
 		localNodeID,
-		&Node{ID: localNodeID},
+		&PingResponse{NodeID: localNodeID},
 	)
 	return
 }
