@@ -18,6 +18,7 @@ type (
 
 		transportClients map[NodeID]Transport
 		ipToNodeStore    map[string]NodeID
+		nodeToIpStore    map[NodeID]string
 
 		msgHandlers map[MessageTypeT]MessageHandler
 
@@ -30,6 +31,7 @@ func NewTransportManager(ctx context.Context) (transportManager *TransportManage
 		ctx:              ctx,
 		transportClients: make(map[NodeID]Transport, 10),
 		ipToNodeStore:    make(map[string]NodeID, 10),
+		nodeToIpStore:    make(map[NodeID]string, 10),
 		clientLock:       &sync.RWMutex{},
 	}
 	if err = transportManager.setupMsgHandlers(); err != nil {
@@ -57,7 +59,19 @@ func (transportManager *TransportManager) ConvertIpToNode(remoteIp string) (node
 	return
 }
 
-func (transportManager *TransportManager) DiscoverNode(remoteIp string) (remoteNode *Node, err error) {
+func (transportManager *TransportManager) ConvertNodeToIp(remoteNodeID NodeID) (remoteIp string, err error) {
+	isPresent := true
+
+	transportManager.clientLock.RLock()
+	defer transportManager.clientLock.RUnlock()
+
+	if remoteIp, isPresent = transportManager.nodeToIpStore[remoteNodeID]; isPresent {
+		return
+	}
+	return
+}
+
+func (transportManager *TransportManager) ConnectToNode(remoteIp string) (remoteNode *Node, err error) {
 	var (
 		transport Transport
 		pingResp  *Message
@@ -72,6 +86,24 @@ func (transportManager *TransportManager) DiscoverNode(remoteIp string) (remoteN
 	if err = transportManager.AddTransportClient(remoteNode.ID, transport); err != nil {
 		return
 	}
+	transportManager.updateIpToNodeMapping(remoteIp, remoteNode.ID)
+	transportManager.updateNodeToIpMapping(remoteNode.ID, remoteIp)
+	return
+}
+
+func (transportManager *TransportManager) updateIpToNodeMapping(remoteIp string, remoteNodeID NodeID) (err error) {
+	transportManager.clientLock.Lock()
+	defer transportManager.clientLock.Unlock()
+
+	transportManager.ipToNodeStore[remoteIp] = remoteNodeID
+	return
+}
+
+func (transportManager *TransportManager) updateNodeToIpMapping(remoteNodeID NodeID, remoteIp string) (err error) {
+	transportManager.clientLock.Lock()
+	defer transportManager.clientLock.Unlock()
+
+	transportManager.nodeToIpStore[remoteNodeID] = remoteIp
 	return
 }
 
