@@ -23,6 +23,7 @@ type (
 		msgHandlers map[MessageTypeT]MessageHandler
 
 		clientLock *sync.RWMutex
+		replMgr    *ReplicationManager
 	}
 )
 
@@ -35,8 +36,7 @@ func NewTransportManager(ctx context.Context) (transportManager *TransportManage
 		msgHandlers:      make(map[MessageTypeT]MessageHandler, 10),
 		clientLock:       &sync.RWMutex{},
 	}
-	transportManager.ctx = context.WithValue(transportManager.ctx, TransportManagerInContext, transportManager)
-
+	transportManager.replMgr = ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
 	if err = transportManager.setupMsgHandlers(); err != nil {
 		return
 	}
@@ -44,9 +44,9 @@ func NewTransportManager(ctx context.Context) (transportManager *TransportManage
 }
 
 func (transportManager *TransportManager) setupMsgHandlers() (err error) {
-	replMgr := transportManager.ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
-	transportManager.msgHandlers[PingMessageType] = replMgr.PingHandler
-	transportManager.msgHandlers[ClusterDiscoveryMessageType] = replMgr.ClusterDiscoveryHandler
+	transportManager.msgHandlers[PingMessageType] = transportManager.replMgr.bootstrapMgr.PingHandler
+	transportManager.msgHandlers[ClusterDiscoveryMessageType] = transportManager.replMgr.bootstrapMgr.ClusterDiscoveryHandler
+	transportManager.msgHandlers[HeartbeatMessageType] = transportManager.replMgr.hbMgr.HeartbeatHandler
 	return
 }
 

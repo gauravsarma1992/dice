@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -25,6 +26,7 @@ type (
 		client           *http.Client
 		server           *gin.Engine
 		transportManager *TransportManager
+		replMgr          *ReplicationManager
 	}
 )
 
@@ -34,13 +36,18 @@ func NewTransport(ctx context.Context, node *Node) (transport Transport, err err
 }
 
 func NewHttpTransport(ctx context.Context, node *Node) (httpTransport *HttpTransport, err error) {
+	// Set gin to production mode
+	gin.SetMode(gin.ReleaseMode)
+
 	httpTransport = &HttpTransport{
-		ctx:              ctx,
-		localNode:        node,
-		client:           &http.Client{},
-		server:           gin.Default(),
-		transportManager: ctx.Value(TransportManagerInContext).(*TransportManager),
+		ctx:       ctx,
+		localNode: node,
+		client:    &http.Client{},
+		server:    gin.Default(),
 	}
+	httpTransport.replMgr = ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
+	httpTransport.transportManager = httpTransport.replMgr.transportMgr
+
 	if err = httpTransport.setup(); err != nil {
 		return
 	}
@@ -172,5 +179,6 @@ func (httpTransport *HttpTransport) run() (err error) {
 			log.Println("http transport failed")
 		}
 	}()
+	time.Sleep(1 * time.Second)
 	return
 }
