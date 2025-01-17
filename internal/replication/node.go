@@ -2,6 +2,8 @@ package replication
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"time"
 )
 
@@ -20,6 +22,10 @@ const (
 	NodeTypeLeader   NodeTypeT = NodeTypeT(0)
 	NodeTypeFollower NodeTypeT = NodeTypeT(1)
 	NodeTypeHidden   NodeTypeT = NodeTypeT(2)
+)
+
+var (
+	SameNodeError = fmt.Errorf("remote node is the same as the local node")
 )
 
 type (
@@ -43,7 +49,7 @@ type (
 
 	NodeConfig struct {
 		LocalHost string `json:"local_host"`
-		LocalPort int    `json:"local_port"`
+		LocalPort string `json:"local_port"`
 
 		// Remote host is the host of the node that we are replicating from.
 		// If the remote host is the same as the local host or if the remote host
@@ -51,14 +57,24 @@ type (
 		// The remote node doesn't have to be the leader. It can recursively learn
 		// about the leader from the remote node.
 		RemoteHost string `json:"remote_host"`
-		RemotePort int    `json:"remote_port"`
+		RemotePort string `json:"remote_port"`
 	}
 )
+
+func (nodeConfig *NodeConfig) String() string {
+	return fmt.Sprintf(
+		"LocalHost: %s, LocalPort: %s, RemoteHost: %s, RemotePort: %s",
+		nodeConfig.LocalHost,
+		nodeConfig.LocalPort,
+		nodeConfig.RemoteHost,
+		nodeConfig.RemotePort,
+	)
+}
 
 func DefaultSingleNodeConfig() (config *NodeConfig) {
 	config = &NodeConfig{
 		LocalHost: "127.0.0.1",
-		LocalPort: 8080,
+		LocalPort: "8080",
 	}
 	return
 }
@@ -74,20 +90,29 @@ func NewNode(ctx context.Context, config *NodeConfig) (node *Node, err error) {
 		state:            NodeStateUnknown,
 		phase:            BootstrapNodePhase,
 		nodeType:         NodeTypeHidden,
-		transportManager: node.ctx.Value(TransportManagerInContext).(*TransportManager),
+		transportManager: ctx.Value(TransportManagerInContext).(*TransportManager),
 	}
 	return
 }
 
 func (node *Node) verifyConfig() (err error) {
 	// check if local network config is correct
+	if node.config.LocalHost == "" || node.config.LocalPort == "" {
+		err = fmt.Errorf("local host or port is not provided for node %d", node.ID)
+		return
+	}
 	// check if remote network config is correct
+	if node.config.RemoteHost == "" {
+		err = fmt.Errorf("remote host is not provided for node %d", node.ID)
+		return
+	}
 	// check current server resources
 	return
 }
 
 func (node *Node) Boot() (err error) {
 	// Start the node
+	log.Println("Node is booting. Config:", node.config)
 	if err = node.verifyConfig(); err != nil {
 		return
 	}
@@ -96,23 +121,30 @@ func (node *Node) Boot() (err error) {
 
 func (node *Node) ConnectToRemoteNode() (nodes []*Node, err error) {
 	var (
-		respMsg    *Message
-		remoteNode *Node
+		respMsg      *Message
+		remoteNodeID NodeID
 	)
-	if remoteNode, err = node.transportManager.ConnectToNode(node.config.RemoteHost); err != nil {
+	if remoteNodeID, err = node.transportManager.ConnectToNode(node, node.config.RemoteHost); err != nil {
+		return
+	}
+	if node.ID == remoteNodeID {
+		err = SameNodeError
 		return
 	}
 	clusterDiscoveryMsg := NewMessage(
 		InfoMessageGroup,
 		ClusterDiscoveryMessageType,
 		node.ID,
-		remoteNode.ID,
-		&ClusterDiscoveryRequest{Node: node},
+		remoteNodeID,
+		ClusterDiscoveryRequest{Node: node},
 	)
 	if respMsg, err = node.transportManager.Send(clusterDiscoveryMsg); err != nil {
 		return
 	}
-	nodes = respMsg.Value.(*ClusterDiscoveryResponse).Nodes
+	clusterDiscoveryResp := &ClusterDiscoveryResponse{}
+	if err = respMsg.FillValue(clusterDiscoveryResp); err != nil {
+		return
+	}
 	return
 }
 

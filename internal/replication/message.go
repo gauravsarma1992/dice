@@ -1,6 +1,8 @@
 package replication
 
 import (
+	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -23,38 +25,39 @@ type (
 	MessageHandler func(*Message) (*Message, error)
 
 	Message struct {
-		Version uint64
-		ID      MessageID
+		Version uint64    `json:"version"`
+		ID      MessageID `json:"id"`
 
-		Timestamp uint64
+		Timestamp uint64 `json:"timestamp"`
 
-		LocalNodeID  NodeID
-		RemoteNodeID NodeID
+		LocalNodeID  NodeID `json:"local_node_id"`
+		RemoteNodeID NodeID `json:"remote_node_id"`
 
 		// The group of the message.
-		Group MessageGroupT
-		Type  MessageTypeT
-		Value interface{}
+		Group MessageGroupT `json:"group"`
+		Type  MessageTypeT  `json:"message_type"`
+		Value []byte        `json:"value"`
 	}
 
 	// PingMessage
 	PingRequest struct {
-		Node *Node
+		Node *Node `json:"node"`
 	}
 	PingResponse struct {
-		NodeID NodeID
+		NodeID NodeID `json:"node_id"`
 	}
 
 	// ClusterDiscovery
 	ClusterDiscoveryRequest struct {
-		Node *Node
+		Node *Node `json:"node"`
 	}
 	ClusterDiscoveryResponse struct {
-		Nodes []*Node
+		Nodes []*Node `json:"nodes"`
 	}
 )
 
 func NewMessage(group MessageGroupT, msgType MessageTypeT, localNodeID NodeID, remoteNodeID NodeID, value interface{}) (msg *Message) {
+	msgVal, _ := json.Marshal(value)
 	msg = &Message{
 		ID:        MessageID(time.Now().UnixNano()),
 		Version:   1,
@@ -64,8 +67,20 @@ func NewMessage(group MessageGroupT, msgType MessageTypeT, localNodeID NodeID, r
 		RemoteNodeID: remoteNodeID,
 
 		Group: group,
-		Value: value,
+		Value: msgVal,
 	}
+	return
+}
+
+func (msg *Message) String() string {
+	return fmt.Sprintf(
+		"ID: %d, Group: %d, Type: %d, LocalNodeID: %d, RemoteNodeID: %d, Value: %s",
+		msg.ID, msg.Group, msg.Type, msg.LocalNodeID, msg.RemoteNodeID, msg.Value,
+	)
+}
+
+func (msg *Message) FillValue(msgVal interface{}) (err error) {
+	err = json.Unmarshal(msg.Value, msgVal)
 	return
 }
 

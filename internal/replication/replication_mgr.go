@@ -2,6 +2,7 @@ package replication
 
 import (
 	"context"
+	"log"
 )
 
 const (
@@ -22,23 +23,25 @@ type (
 		config       *ReplicationConfig
 	}
 
-	ReplicationConfig struct{}
+	ReplicationConfig struct {
+		NodeConfig *NodeConfig
+	}
 )
 
-func NewReplicationManager(config *ReplicationConfig) (replMgr *ReplicationManager, err error) {
+func NewReplicationManager(ctx context.Context, config *ReplicationConfig) (replMgr *ReplicationManager, err error) {
 	replMgr = &ReplicationManager{
 		config: config,
 	}
-	replMgr.ctx, replMgr.cancelFunc = context.WithCancel(context.Background())
+	replMgr.ctx, replMgr.cancelFunc = context.WithCancel(ctx)
+	replMgr.ctx = context.WithValue(replMgr.ctx, ReplicationManagerInContext, replMgr)
 
 	if replMgr.transportMgr, err = NewTransportManager(replMgr.ctx); err != nil {
 		return
 	}
+	replMgr.ctx = context.WithValue(replMgr.ctx, TransportManagerInContext, replMgr.transportMgr)
 	if replMgr.cluster, err = NewCluster(replMgr.ctx, replMgr.localNode); err != nil {
 		return
 	}
-	replMgr.ctx = context.WithValue(replMgr.ctx, ReplicationManagerInContext, replMgr)
-	replMgr.ctx = context.WithValue(replMgr.ctx, TransportManagerInContext, replMgr)
 	return
 }
 
@@ -50,7 +53,7 @@ func (replMgr *ReplicationManager) StartBootstrapPhase() (err error) {
 	var (
 		discoveredNodes []*Node
 	)
-	if replMgr.localNode, err = NewNode(replMgr.ctx, nil); err != nil {
+	if replMgr.localNode, err = NewNode(replMgr.ctx, replMgr.config.NodeConfig); err != nil {
 		return
 	}
 	replMgr.ctx = context.WithValue(replMgr.ctx, LocalNodeInContext, replMgr.localNode)
@@ -68,10 +71,15 @@ func (replMgr *ReplicationManager) StartBootstrapPhase() (err error) {
 
 func (replMgr *ReplicationManager) Run() (err error) {
 	if err = replMgr.StartNetworkConnectivity(); err != nil {
+		log.Println("Error in setting up network connectivity", err)
 		return
 	}
+	log.Println("Network connectivity established")
 	if err = replMgr.StartBootstrapPhase(); err != nil {
+		log.Println("Error in bootstrap phase", err)
 		return
 	}
+	log.Println("Bootstrap phase completed")
+	log.Println("Shutting down replication manager")
 	return
 }
