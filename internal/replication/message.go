@@ -86,17 +86,31 @@ func (msg *Message) FillValue(msgVal interface{}) (err error) {
 
 func (replMgr *ReplicationManager) PingHandler(reqMsg *Message) (respMsg *Message, err error) {
 	// Get the local node ID from the context
-	localNodeID := replMgr.ctx.Value(LocalNodeInContext).(*Node).ID
 	respMsg = NewMessage(
 		InfoMessageGroup,
 		PingMessageType,
 		reqMsg.RemoteNodeID,
-		localNodeID,
-		&PingResponse{NodeID: localNodeID},
+		replMgr.localNode.ID,
+		&PingResponse{NodeID: replMgr.localNode.ID},
 	)
 	return
 }
 
 func (replMgr *ReplicationManager) ClusterDiscoveryHandler(reqMsg *Message) (respMsg *Message, err error) {
+	// Get the cluster nodes
+	var (
+		nodes []*Node
+	)
+	if nodes, err = replMgr.cluster.GetNodes(); err != nil {
+		return
+	}
+	respMsg = NewMessage(
+		InfoMessageGroup,
+		ClusterDiscoveryMessageType,
+		reqMsg.RemoteNodeID,
+		replMgr.localNode.ID,
+		&ClusterDiscoveryResponse{Nodes: nodes},
+	)
+
 	return
 }

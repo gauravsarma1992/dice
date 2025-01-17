@@ -40,6 +40,16 @@ func (cluster *Cluster) AddNode(node *Node) (err error) {
 	return
 }
 
+func (cluster *Cluster) GetNodes() (nodes []*Node, err error) {
+	cluster.clusterLock.RLock()
+	defer cluster.clusterLock.RUnlock()
+
+	for _, node := range cluster.nodes {
+		nodes = append(nodes, node)
+	}
+	return
+}
+
 func (cluster *Cluster) RemoveNode(node *Node) (err error) {
 	cluster.clusterLock.Lock()
 	defer cluster.clusterLock.Unlock()
