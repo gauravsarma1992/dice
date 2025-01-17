@@ -20,6 +20,7 @@ type (
 		cluster   *Cluster
 
 		transportMgr *TransportManager
+		electionMgr  *ElectionManager
 		config       *ReplicationConfig
 	}
 
@@ -40,6 +41,9 @@ func NewReplicationManager(ctx context.Context, config *ReplicationConfig) (repl
 	}
 	replMgr.ctx = context.WithValue(replMgr.ctx, TransportManagerInContext, replMgr.transportMgr)
 	if replMgr.cluster, err = NewCluster(replMgr.ctx, replMgr.localNode); err != nil {
+		return
+	}
+	if replMgr.electionMgr, err = NewElectionManager(replMgr.ctx); err != nil {
 		return
 	}
 	return
@@ -69,6 +73,22 @@ func (replMgr *ReplicationManager) StartBootstrapPhase() (err error) {
 	return
 }
 
+func (replMgr *ReplicationManager) StartHeartbeats() (err error) {
+
+	return
+}
+
+func (replMgr *ReplicationManager) StartDataReplicationPhase() (err error) {
+	return
+}
+
+func (replMgr *ReplicationManager) StartElectionManager() (err error) {
+	if err = replMgr.electionMgr.Start(); err != nil {
+		return
+	}
+	return
+}
+
 func (replMgr *ReplicationManager) Run() (err error) {
 	if err = replMgr.StartNetworkConnectivity(); err != nil {
 		log.Println("Error in setting up network connectivity", err)
@@ -80,6 +100,16 @@ func (replMgr *ReplicationManager) Run() (err error) {
 		return
 	}
 	log.Println("Bootstrap phase completed")
+	if err = replMgr.StartHeartbeats(); err != nil {
+		log.Println("Error in heartbeats phase", err)
+		return
+	}
+	log.Println("Heartbeats phase started")
+	if err = replMgr.StartDataReplicationPhase(); err != nil {
+		log.Println("Error in data replication phase", err)
+		return
+	}
+	log.Println("Data replication phase completed")
 	log.Println("Shutting down replication manager")
 	return
 }
