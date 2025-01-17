@@ -32,8 +32,11 @@ func NewTransportManager(ctx context.Context) (transportManager *TransportManage
 		transportClients: make(map[NodeID]Transport, 10),
 		ipToNodeStore:    make(map[string]NodeID, 10),
 		nodeToIpStore:    make(map[NodeID]string, 10),
+		msgHandlers:      make(map[MessageTypeT]MessageHandler, 10),
 		clientLock:       &sync.RWMutex{},
 	}
+	transportManager.ctx = context.WithValue(transportManager.ctx, TransportManagerInContext, transportManager)
+
 	if err = transportManager.setupMsgHandlers(); err != nil {
 		return
 	}
@@ -71,23 +74,29 @@ func (transportManager *TransportManager) ConvertNodeToIp(remoteNodeID NodeID) (
 	return
 }
 
-func (transportManager *TransportManager) ConnectToNode(remoteIp string) (remoteNode *Node, err error) {
+func (transportManager *TransportManager) ConnectToNode(localNode *Node, remoteIp string) (remoteNodeID NodeID, err error) {
 	var (
-		transport Transport
-		pingResp  *Message
+		transport   Transport
+		pingRespMsg *Message
+		pingResp    *PingResponse
 	)
-	if transport, err = NewTransport(transportManager.ctx); err != nil {
+	if transport, err = NewTransport(transportManager.ctx, localNode); err != nil {
 		return
 	}
-	if pingResp, err = transport.Ping(remoteIp); err != nil {
+	if pingRespMsg, err = transport.Ping(remoteIp); err != nil {
 		return
 	}
-	remoteNode = pingResp.Value.(*Node)
-	if err = transportManager.AddTransportClient(remoteNode.ID, transport); err != nil {
+	pingResp = &PingResponse{}
+	if err = pingRespMsg.FillValue(pingResp); err != nil {
 		return
 	}
-	transportManager.updateIpToNodeMapping(remoteIp, remoteNode.ID)
-	transportManager.updateNodeToIpMapping(remoteNode.ID, remoteIp)
+	remoteNodeID = pingResp.NodeID
+
+	if err = transportManager.AddTransportClient(remoteNodeID, transport); err != nil {
+		return
+	}
+	transportManager.updateIpToNodeMapping(remoteIp, remoteNodeID)
+	transportManager.updateNodeToIpMapping(remoteNodeID, remoteIp)
 	return
 }
 
