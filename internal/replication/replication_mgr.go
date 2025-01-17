@@ -3,14 +3,10 @@ package replication
 import (
 	"context"
 	"log"
-
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j/db"
 )
 
 const (
 	ReplicationManagerInContext = "replication-manager-in-context"
-	TransportManagerInContext   = "transport-manager-in-context"
-	LocalNodeInContext          = "local-node-in-context"
 )
 
 type (
@@ -22,9 +18,10 @@ type (
 		cluster   *Cluster
 
 		transportMgr *TransportManager
+		bootstrapMgr *BootstrapManager
 		electionMgr  *ElectionManager
 		hbMgr        *HeartbeatManager
-		drMgr        *db.DataReplicationManager
+		drMgr        *DataReplicationManager
 		config       *ReplicationConfig
 	}
 
@@ -37,20 +34,23 @@ func NewReplicationManager(ctx context.Context, config *ReplicationConfig) (repl
 	replMgr = &ReplicationManager{
 		config: config,
 	}
-	replMgr.ctx, replMgr.cancelFunc = context.WithCancel(ctx)
-	replMgr.ctx = context.WithValue(replMgr.ctx, ReplicationManagerInContext, replMgr)
 
-	if replMgr.transportMgr, err = NewTransportManager(replMgr.ctx); err != nil {
-		return
-	}
-	replMgr.ctx = context.WithValue(replMgr.ctx, TransportManagerInContext, replMgr.transportMgr)
-	if replMgr.cluster, err = NewCluster(replMgr.ctx, replMgr.localNode); err != nil {
+	replMgr.ctx, replMgr.cancelFunc = context.WithCancel(ctx)
+	replMgr.ctx = context.WithValue(ctx, ReplicationManagerInContext, replMgr)
+
+	if replMgr.bootstrapMgr, err = NewBootstrapManager(replMgr.ctx); err != nil {
 		return
 	}
 	if replMgr.hbMgr, err = NewHeartbeatManager(replMgr.ctx); err != nil {
 		return
 	}
+	if replMgr.transportMgr, err = NewTransportManager(replMgr.ctx); err != nil {
+		return
+	}
 	if replMgr.electionMgr, err = NewElectionManager(replMgr.ctx); err != nil {
+		return
+	}
+	if replMgr.cluster, err = NewCluster(replMgr.ctx); err != nil {
 		return
 	}
 	if replMgr.drMgr, err = NewDataReplicationManager(replMgr.ctx); err != nil {
@@ -65,23 +65,10 @@ func (replMgr *ReplicationManager) StartNetworkConnectivity() (err error) {
 }
 
 func (replMgr *ReplicationManager) StartBootstrapPhase() (err error) {
-	var (
-		discoveredNodes []*Node
-	)
-	if replMgr.localNode, err = NewNode(replMgr.ctx, replMgr.config.NodeConfig); err != nil {
-		return
-	}
-	replMgr.ctx = context.WithValue(replMgr.ctx, LocalNodeInContext, replMgr.localNode)
-	if err = replMgr.localNode.Boot(); err != nil {
-		return
-	}
-	if discoveredNodes, err = replMgr.localNode.ConnectToRemoteNode(); err != nil {
-		return
-	}
-	if err = replMgr.cluster.Update(discoveredNodes); err != nil {
-		return
-	}
 	log.Println("Bootstrap phase completed")
+	if err = replMgr.bootstrapMgr.Start(); err != nil {
+		return
+	}
 	return
 }
 
@@ -124,9 +111,15 @@ func (replMgr *ReplicationManager) Run() (err error) {
 		log.Println("Error in data replication phase", err)
 		return
 	}
-	if err = replMgr.StartDataReplicationPhase(); err != nil {
-		log.Println("Error in data replication phase", err)
+	if err = replMgr.StartElectionManager(); err != nil {
+		log.Println("Error in election manager phase", err)
 		return
+	}
+	for {
+		select {
+		case <-replMgr.ctx.Done():
+			return
+		}
 	}
 	log.Println("Shutting down replication manager")
 	return

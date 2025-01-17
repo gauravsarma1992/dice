@@ -15,6 +15,7 @@ const (
 	// Message Types
 	PingMessageType             MessageTypeT = MessageTypeT(0)
 	ClusterDiscoveryMessageType MessageTypeT = MessageTypeT(1)
+	HeartbeatMessageType        MessageTypeT = MessageTypeT(2)
 )
 
 type (
@@ -38,22 +39,6 @@ type (
 		Type  MessageTypeT  `json:"message_type"`
 		Value []byte        `json:"value"`
 	}
-
-	// PingMessage
-	PingRequest struct {
-		Node *Node `json:"node"`
-	}
-	PingResponse struct {
-		NodeID NodeID `json:"node_id"`
-	}
-
-	// ClusterDiscovery
-	ClusterDiscoveryRequest struct {
-		Node *Node `json:"node"`
-	}
-	ClusterDiscoveryResponse struct {
-		Nodes []*Node `json:"nodes"`
-	}
 )
 
 func NewMessage(group MessageGroupT, msgType MessageTypeT, localNodeID NodeID, remoteNodeID NodeID, value interface{}) (msg *Message) {
@@ -67,6 +52,7 @@ func NewMessage(group MessageGroupT, msgType MessageTypeT, localNodeID NodeID, r
 		RemoteNodeID: remoteNodeID,
 
 		Group: group,
+		Type:  msgType,
 		Value: msgVal,
 	}
 	return
@@ -81,36 +67,5 @@ func (msg *Message) String() string {
 
 func (msg *Message) FillValue(msgVal interface{}) (err error) {
 	err = json.Unmarshal(msg.Value, msgVal)
-	return
-}
-
-func (replMgr *ReplicationManager) PingHandler(reqMsg *Message) (respMsg *Message, err error) {
-	// Get the local node ID from the context
-	respMsg = NewMessage(
-		InfoMessageGroup,
-		PingMessageType,
-		reqMsg.RemoteNodeID,
-		replMgr.localNode.ID,
-		&PingResponse{NodeID: replMgr.localNode.ID},
-	)
-	return
-}
-
-func (replMgr *ReplicationManager) ClusterDiscoveryHandler(reqMsg *Message) (respMsg *Message, err error) {
-	// Get the cluster nodes
-	var (
-		nodes []*Node
-	)
-	if nodes, err = replMgr.cluster.GetNodes(); err != nil {
-		return
-	}
-	respMsg = NewMessage(
-		InfoMessageGroup,
-		ClusterDiscoveryMessageType,
-		reqMsg.RemoteNodeID,
-		replMgr.localNode.ID,
-		&ClusterDiscoveryResponse{Nodes: nodes},
-	)
-
 	return
 }

@@ -16,21 +16,29 @@ type (
 		nodes map[NodeID]*Node
 
 		clusterLock *sync.RWMutex
+
+		replMgr *ReplicationManager
 	}
 )
 
-func NewCluster(ctx context.Context, localNode *Node) (cluster *Cluster, err error) {
+func NewCluster(ctx context.Context) (cluster *Cluster, err error) {
 	cluster = &Cluster{
 		ctx:         ctx,
-		localNode:   localNode,
 		clusterLock: &sync.RWMutex{},
+		nodes:       make(map[NodeID]*Node, 10),
 	}
+	cluster.replMgr = ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
 	return
 }
 
 func (cluster *Cluster) AddNode(node *Node) (err error) {
 	cluster.clusterLock.Lock()
 	defer cluster.clusterLock.Unlock()
+
+	if cluster.localNode == nil {
+		cluster.localNode = cluster.replMgr.localNode
+	}
+	log.Println("Adding node to cluster", node.ID)
 
 	// Skip if the node is the local node
 	if node.ID == cluster.localNode.ID {

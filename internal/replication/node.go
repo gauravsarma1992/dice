@@ -44,6 +44,7 @@ type (
 		nodeType NodeTypeT  `json:"node_type"`
 
 		transportManager *TransportManager
+		replMgr          *ReplicationManager
 		config           *NodeConfig
 	}
 
@@ -84,14 +85,15 @@ func NewNode(ctx context.Context, config *NodeConfig) (node *Node, err error) {
 		config = DefaultSingleNodeConfig()
 	}
 	node = &Node{
-		ID:               NodeID(time.Now().UnixNano()),
-		ctx:              ctx,
-		config:           config,
-		state:            NodeStateUnknown,
-		phase:            BootstrapNodePhase,
-		nodeType:         NodeTypeHidden,
-		transportManager: ctx.Value(TransportManagerInContext).(*TransportManager),
+		ID:       NodeID(time.Now().UnixNano()),
+		ctx:      ctx,
+		config:   config,
+		state:    NodeStateUnknown,
+		phase:    BootstrapNodePhase,
+		nodeType: NodeTypeHidden,
 	}
+	node.replMgr = ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
+	node.transportManager = node.replMgr.transportMgr
 	return
 }
 
@@ -112,7 +114,7 @@ func (node *Node) verifyConfig() (err error) {
 
 func (node *Node) Boot() (err error) {
 	// Start the node
-	log.Println("Node is booting. Config:", node.config)
+	log.Println("Node is booting. Config:", node.ID, node.config)
 	if err = node.verifyConfig(); err != nil {
 		return
 	}
@@ -128,7 +130,7 @@ func (node *Node) ConnectToRemoteNode() (nodes []*Node, err error) {
 		return
 	}
 	if node.ID == remoteNodeID {
-		err = SameNodeError
+		log.Println(SameNodeError, node.ID, remoteNodeID)
 		return
 	}
 	clusterDiscoveryMsg := NewMessage(
@@ -136,7 +138,7 @@ func (node *Node) ConnectToRemoteNode() (nodes []*Node, err error) {
 		ClusterDiscoveryMessageType,
 		node.ID,
 		remoteNodeID,
-		ClusterDiscoveryRequest{Node: node},
+		&ClusterDiscoveryRequest{Node: node},
 	)
 	if respMsg, err = node.transportManager.Send(clusterDiscoveryMsg); err != nil {
 		return
@@ -145,6 +147,8 @@ func (node *Node) ConnectToRemoteNode() (nodes []*Node, err error) {
 	if err = respMsg.FillValue(clusterDiscoveryResp); err != nil {
 		return
 	}
+	log.Println("Received cluster discovery response", clusterDiscoveryResp)
+	nodes = clusterDiscoveryResp.Nodes
 	return
 }
 
