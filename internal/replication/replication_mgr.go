@@ -3,6 +3,8 @@ package replication
 import (
 	"context"
 	"log"
+
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j/db"
 )
 
 const (
@@ -21,6 +23,8 @@ type (
 
 		transportMgr *TransportManager
 		electionMgr  *ElectionManager
+		hbMgr        *HeartbeatManager
+		drMgr        *db.DataReplicationManager
 		config       *ReplicationConfig
 	}
 
@@ -43,13 +47,20 @@ func NewReplicationManager(ctx context.Context, config *ReplicationConfig) (repl
 	if replMgr.cluster, err = NewCluster(replMgr.ctx, replMgr.localNode); err != nil {
 		return
 	}
+	if replMgr.hbMgr, err = NewHeartbeatManager(replMgr.ctx); err != nil {
+		return
+	}
 	if replMgr.electionMgr, err = NewElectionManager(replMgr.ctx); err != nil {
+		return
+	}
+	if replMgr.drMgr, err = NewDataReplicationManager(replMgr.ctx); err != nil {
 		return
 	}
 	return
 }
 
 func (replMgr *ReplicationManager) StartNetworkConnectivity() (err error) {
+	log.Println("Network connectivity established")
 	return
 }
 
@@ -70,19 +81,26 @@ func (replMgr *ReplicationManager) StartBootstrapPhase() (err error) {
 	if err = replMgr.cluster.Update(discoveredNodes); err != nil {
 		return
 	}
+	log.Println("Bootstrap phase completed")
 	return
 }
 
 func (replMgr *ReplicationManager) StartHeartbeats() (err error) {
-
+	log.Println("Heartbeats phase started")
+	go replMgr.hbMgr.Start()
 	return
 }
 
 func (replMgr *ReplicationManager) StartDataReplicationPhase() (err error) {
+	log.Println("Data replication phase completed")
+	if err = replMgr.drMgr.Start(); err != nil {
+		return
+	}
 	return
 }
 
 func (replMgr *ReplicationManager) StartElectionManager() (err error) {
+	log.Println("Election manager started")
 	if err = replMgr.electionMgr.Start(); err != nil {
 		return
 	}
@@ -94,22 +112,22 @@ func (replMgr *ReplicationManager) Run() (err error) {
 		log.Println("Error in setting up network connectivity", err)
 		return
 	}
-	log.Println("Network connectivity established")
 	if err = replMgr.StartBootstrapPhase(); err != nil {
 		log.Println("Error in bootstrap phase", err)
 		return
 	}
-	log.Println("Bootstrap phase completed")
 	if err = replMgr.StartHeartbeats(); err != nil {
 		log.Println("Error in heartbeats phase", err)
 		return
 	}
-	log.Println("Heartbeats phase started")
 	if err = replMgr.StartDataReplicationPhase(); err != nil {
 		log.Println("Error in data replication phase", err)
 		return
 	}
-	log.Println("Data replication phase completed")
+	if err = replMgr.StartDataReplicationPhase(); err != nil {
+		log.Println("Error in data replication phase", err)
+		return
+	}
 	log.Println("Shutting down replication manager")
 	return
 }
