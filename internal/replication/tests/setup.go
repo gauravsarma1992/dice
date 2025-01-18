@@ -54,9 +54,9 @@ func (replSuite *ReplicationTestSuite) createAndRunNodes() (err error) {
 			replConfig *replication.ReplicationConfig
 		)
 		nodeConfig = replication.DefaultSingleNodeConfig()
-		nodeConfig.LocalPort = strconv.Itoa(StartingPort + nodeCount)
-		nodeConfig.RemoteHost = nodeConfig.LocalHost
-		nodeConfig.RemotePort = strconv.Itoa(StartingPort)
+		nodeConfig.Local.Port = strconv.Itoa(StartingPort + nodeCount)
+		nodeConfig.Remote.Host = nodeConfig.Local.Host
+		nodeConfig.Remote.Port = strconv.Itoa(StartingPort)
 
 		replConfig = &replication.ReplicationConfig{
 			NodeConfig: nodeConfig,

@@ -38,44 +38,56 @@ type (
 		ctx context.Context
 		ID  NodeID
 
-		// Runtime information of the state, phase and type of the node.
-		state    NodeStateT `json:"state"`
-		phase    NodePhaseT `json:"phase"`
-		nodeType NodeTypeT  `json:"node_type"`
+		// Runtime information of the State, phase and type of the node.
+		State    NodeStateT `json:"state"`
+		Phase    NodePhaseT `json:"phase"`
+		NodeType NodeTypeT  `json:"node_type"`
 
 		transportManager *TransportManager
 		replMgr          *ReplicationManager
-		config           *NodeConfig
+		Config           *NodeConfig
+	}
+	NodeAddr struct {
+		Host string `json:"host"`
+		Port string `json:"port"`
 	}
 
 	NodeConfig struct {
-		LocalHost string `json:"local_host"`
-		LocalPort string `json:"local_port"`
+		Local *NodeAddr `json:"local"`
 
 		// Remote host is the host of the node that we are replicating from.
 		// If the remote host is the same as the local host or if the remote host
 		// is not provided, then the node is a leader node or a single node.
 		// The remote node doesn't have to be the leader. It can recursively learn
 		// about the leader from the remote node.
-		RemoteHost string `json:"remote_host"`
-		RemotePort string `json:"remote_port"`
+		Remote *NodeAddr `json:"remote"`
 	}
 )
+
+func (node *Node) String() string {
+	return fmt.Sprintf(
+		"ID: %d, State: %d, Phase: %d, Type: %d, Config: %s",
+		node.ID, node.State, node.Phase, node.NodeType, node.Config,
+	)
+}
 
 func (nodeConfig *NodeConfig) String() string {
 	return fmt.Sprintf(
 		"LocalHost: %s, LocalPort: %s, RemoteHost: %s, RemotePort: %s",
-		nodeConfig.LocalHost,
-		nodeConfig.LocalPort,
-		nodeConfig.RemoteHost,
-		nodeConfig.RemotePort,
+		nodeConfig.Local.Host,
+		nodeConfig.Local.Port,
+		nodeConfig.Remote.Host,
+		nodeConfig.Remote.Port,
 	)
 }
 
 func DefaultSingleNodeConfig() (config *NodeConfig) {
 	config = &NodeConfig{
-		LocalHost: "127.0.0.1",
-		LocalPort: "8080",
+		Local: &NodeAddr{
+			Host: "127.0.0.1",
+			Port: "8080",
+		},
+		Remote: &NodeAddr{},
 	}
 	return
 }
@@ -87,10 +99,10 @@ func NewNode(ctx context.Context, config *NodeConfig) (node *Node, err error) {
 	node = &Node{
 		ID:       NodeID(time.Now().UnixNano()),
 		ctx:      ctx,
-		config:   config,
-		state:    NodeStateUnknown,
-		phase:    BootstrapNodePhase,
-		nodeType: NodeTypeHidden,
+		Config:   config,
+		State:    NodeStateUnknown,
+		Phase:    BootstrapNodePhase,
+		NodeType: NodeTypeHidden,
 	}
 	node.replMgr = ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
 	node.transportManager = node.replMgr.transportMgr
@@ -99,12 +111,12 @@ func NewNode(ctx context.Context, config *NodeConfig) (node *Node, err error) {
 
 func (node *Node) verifyConfig() (err error) {
 	// check if local network config is correct
-	if node.config.LocalHost == "" || node.config.LocalPort == "" {
+	if node.Config.Local.Host == "" || node.Config.Local.Port == "" {
 		err = fmt.Errorf("local host or port is not provided for node %d", node.ID)
 		return
 	}
 	// check if remote network config is correct
-	if node.config.RemoteHost == "" {
+	if node.Config.Remote.Host == "" {
 		err = fmt.Errorf("remote host is not provided for node %d", node.ID)
 		return
 	}
@@ -114,30 +126,38 @@ func (node *Node) verifyConfig() (err error) {
 
 func (node *Node) Boot() (err error) {
 	// Start the node
-	log.Println("Node is booting. Config:", node.ID, node.config)
+	log.Println("Node is booting. Config:", node.ID, node.Config)
 	if err = node.verifyConfig(); err != nil {
 		return
 	}
 	return
 }
 
+func (node *Node) GetLocalUser() (msgUser *MessageUser) {
+	msgUser = &MessageUser{
+		NodeID: node.ID,
+		Addr:   node.Config.Local,
+	}
+	return
+}
+
 func (node *Node) ConnectToRemoteNode() (nodes []*Node, err error) {
 	var (
-		respMsg      *Message
-		remoteNodeID NodeID
+		respMsg    *Message
+		remoteNode *Node
 	)
-	if remoteNodeID, err = node.transportManager.ConnectToNode(node, node.config.RemoteHost); err != nil {
+	if remoteNode, err = node.transportManager.ConnectToNode(node.Config.Remote); err != nil {
 		return
 	}
-	if node.ID == remoteNodeID {
-		log.Println(SameNodeError, node.ID, remoteNodeID)
+	if node.ID == remoteNode.ID {
+		log.Println(SameNodeError, node.ID, remoteNode.ID)
 		return
 	}
 	clusterDiscoveryMsg := NewMessage(
 		InfoMessageGroup,
 		ClusterDiscoveryMessageType,
-		node.ID,
-		remoteNodeID,
+		node.GetLocalUser(),
+		remoteNode.GetLocalUser(),
 		&ClusterDiscoveryRequest{Node: node},
 	)
 	if respMsg, err = node.transportManager.Send(clusterDiscoveryMsg); err != nil {
@@ -147,7 +167,6 @@ func (node *Node) ConnectToRemoteNode() (nodes []*Node, err error) {
 	if err = respMsg.FillValue(clusterDiscoveryResp); err != nil {
 		return
 	}
-	log.Println("Received cluster discovery response", clusterDiscoveryResp)
 	nodes = clusterDiscoveryResp.Nodes
 	return
 }

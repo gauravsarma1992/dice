@@ -16,13 +16,12 @@ import (
 
 type (
 	Transport interface {
-		Ping(string) (*Message, error)
+		Ping(*NodeAddr) (*Message, error)
 		Send(*Message) (*Message, error)
 	}
 
 	HttpTransport struct {
 		ctx              context.Context
-		localNode        *Node
 		client           *http.Client
 		server           *gin.Engine
 		transportManager *TransportManager
@@ -40,10 +39,9 @@ func NewHttpTransport(ctx context.Context, node *Node) (httpTransport *HttpTrans
 	gin.SetMode(gin.ReleaseMode)
 
 	httpTransport = &HttpTransport{
-		ctx:       ctx,
-		localNode: node,
-		client:    &http.Client{},
-		server:    gin.Default(),
+		ctx:    ctx,
+		client: &http.Client{},
+		server: gin.Default(),
 	}
 	httpTransport.replMgr = ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
 	httpTransport.transportManager = httpTransport.replMgr.transportMgr
@@ -62,22 +60,22 @@ func (httpTransport *HttpTransport) setup() (err error) {
 	return
 }
 
-func (httpTransport *HttpTransport) getRemoteUrl(remoteIp string) string {
-	return fmt.Sprintf("http://%s:%s", remoteIp, httpTransport.localNode.config.RemotePort)
+func (httpTransport *HttpTransport) getRemoteUrl(remoteAddr *NodeAddr) string {
+	return fmt.Sprintf("http://%s:%s", remoteAddr.Host, remoteAddr.Port)
 }
 
-func (httpTransport *HttpTransport) Ping(remoteIp string) (respMsg *Message, err error) {
+func (httpTransport *HttpTransport) Ping(remoteAddr *NodeAddr) (respMsg *Message, err error) {
 	var (
 		reqMsg *Message
 	)
 	reqMsg = NewMessage(
 		InfoMessageGroup,
 		PingMessageType,
-		httpTransport.localNode.ID,
-		0,
-		&PingRequest{Node: httpTransport.localNode},
+		httpTransport.replMgr.localNode.GetLocalUser(),
+		&MessageUser{Addr: remoteAddr},
+		&PingRequest{Node: httpTransport.replMgr.localNode},
 	)
-	if respMsg, err = httpTransport.send(remoteIp, reqMsg); err != nil {
+	if respMsg, err = httpTransport.send(remoteAddr, reqMsg); err != nil {
 		return
 	}
 	return
@@ -85,19 +83,18 @@ func (httpTransport *HttpTransport) Ping(remoteIp string) (respMsg *Message, err
 
 func (httpTransport *HttpTransport) Send(reqMsg *Message) (respMsg *Message, err error) {
 	var (
-		remoteIp     string
-		remoteNodeID NodeID
+		remoteAddr *NodeAddr
 	)
-	if remoteIp, err = httpTransport.transportManager.ConvertNodeToIp(remoteNodeID); err != nil {
+	if remoteAddr, err = httpTransport.transportManager.ConvertNodeToAddr(reqMsg.Remote.NodeID); err != nil {
 		return
 	}
-	if respMsg, err = httpTransport.send(remoteIp, reqMsg); err != nil {
+	if respMsg, err = httpTransport.send(remoteAddr, reqMsg); err != nil {
 		return
 	}
 	return
 }
 
-func (httpTransport *HttpTransport) send(remoteIp string, reqMsg *Message) (respMsg *Message, err error) {
+func (httpTransport *HttpTransport) send(remoteAddr *NodeAddr, reqMsg *Message) (respMsg *Message, err error) {
 	var (
 		httpReq     *http.Request
 		httpResp    *http.Response
@@ -114,7 +111,7 @@ func (httpTransport *HttpTransport) send(remoteIp string, reqMsg *Message) (resp
 	httpReqBodyBuffer := bytes.NewReader(httpReqBody)
 	if httpReq, err = http.NewRequest(
 		"POST",
-		fmt.Sprintf("%s/handler", httpTransport.getRemoteUrl(remoteIp)),
+		fmt.Sprintf("%s/handler", httpTransport.getRemoteUrl(remoteAddr)),
 		httpReqBodyBuffer,
 	); err != nil {
 		return
@@ -150,7 +147,7 @@ func (httpTransport *HttpTransport) messageHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	log.Println("Received message: ", receivedMsg)
+	log.Println("Received message at server:", receivedMsg)
 	if msgHandler, isPresent = httpTransport.transportManager.msgHandlers[receivedMsg.Type]; !isPresent {
 		err = errors.New("Message handler not set")
 		log.Println("failed to fetch message handler", err)
@@ -172,8 +169,8 @@ func (httpTransport *HttpTransport) run() (err error) {
 	go func() {
 		if err = httpTransport.server.Run(
 			fmt.Sprintf("%s:%s",
-				httpTransport.localNode.config.LocalHost,
-				httpTransport.localNode.config.LocalPort,
+				httpTransport.replMgr.localNode.Config.Local.Host,
+				httpTransport.replMgr.localNode.Config.Local.Port,
 			),
 		); err != nil {
 			log.Println("http transport failed")

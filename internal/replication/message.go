@@ -3,6 +3,7 @@ package replication
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -31,25 +32,36 @@ type (
 
 		Timestamp uint64 `json:"timestamp"`
 
-		LocalNodeID  NodeID `json:"local_node_id"`
-		RemoteNodeID NodeID `json:"remote_node_id"`
+		Local  *MessageUser `json:"local_user"`
+		Remote *MessageUser `json:"remote_user"`
 
 		// The group of the message.
 		Group MessageGroupT `json:"group"`
 		Type  MessageTypeT  `json:"message_type"`
 		Value []byte        `json:"value"`
 	}
+	MessageUser struct {
+		NodeID NodeID    `json:"node_id"`
+		Addr   *NodeAddr `json:"addr"`
+	}
 )
 
-func NewMessage(group MessageGroupT, msgType MessageTypeT, localNodeID NodeID, remoteNodeID NodeID, value interface{}) (msg *Message) {
-	msgVal, _ := json.Marshal(value)
+func NewMessage(group MessageGroupT, msgType MessageTypeT, localUser *MessageUser, remoteUser *MessageUser, value interface{}) (msg *Message) {
+	var (
+		err    error
+		msgVal []byte
+	)
+	if msgVal, err = json.Marshal(value); err != nil {
+		log.Println("error while marshaling value in NewMessage", err)
+		return
+	}
 	msg = &Message{
 		ID:        MessageID(time.Now().UnixNano()),
 		Version:   1,
 		Timestamp: uint64(time.Now().UnixNano()),
 
-		LocalNodeID:  localNodeID,
-		RemoteNodeID: remoteNodeID,
+		Local:  localUser,
+		Remote: remoteUser,
 
 		Group: group,
 		Type:  msgType,
@@ -60,12 +72,19 @@ func NewMessage(group MessageGroupT, msgType MessageTypeT, localNodeID NodeID, r
 
 func (msg *Message) String() string {
 	return fmt.Sprintf(
-		"ID: %d, Group: %d, Type: %d, LocalNodeID: %d, RemoteNodeID: %d, Value: %s",
-		msg.ID, msg.Group, msg.Type, msg.LocalNodeID, msg.RemoteNodeID, msg.Value,
+		"ID: %d, Group: %d, Type: %d, Local: %s, Remote: %s, Value: %s",
+		msg.ID, msg.Group, msg.Type, msg.Local, msg.Remote, msg.Value,
 	)
 }
 
 func (msg *Message) FillValue(msgVal interface{}) (err error) {
 	err = json.Unmarshal(msg.Value, msgVal)
 	return
+}
+
+func (msgUser *MessageUser) String() string {
+	return fmt.Sprintf(
+		"NodeID: %d, Addr: %s",
+		msgUser.NodeID, msgUser.Addr,
+	)
 }

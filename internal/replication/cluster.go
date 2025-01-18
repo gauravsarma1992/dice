@@ -38,7 +38,7 @@ func (cluster *Cluster) AddNode(node *Node) (err error) {
 	if cluster.localNode == nil {
 		cluster.localNode = cluster.replMgr.localNode
 	}
-	log.Println("Adding node to cluster", node.ID)
+	log.Println("Adding node to cluster", node)
 
 	// Skip if the node is the local node
 	if node.ID == cluster.localNode.ID {

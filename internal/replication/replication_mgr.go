@@ -59,11 +59,6 @@ func NewReplicationManager(ctx context.Context, config *ReplicationConfig) (repl
 	return
 }
 
-func (replMgr *ReplicationManager) StartNetworkConnectivity() (err error) {
-	log.Println("Network connectivity established")
-	return
-}
-
 func (replMgr *ReplicationManager) StartBootstrapPhase() (err error) {
 	log.Println("Bootstrap phase completed")
 	if err = replMgr.bootstrapMgr.Start(); err != nil {
@@ -95,10 +90,6 @@ func (replMgr *ReplicationManager) StartElectionManager() (err error) {
 }
 
 func (replMgr *ReplicationManager) Run() (err error) {
-	if err = replMgr.StartNetworkConnectivity(); err != nil {
-		log.Println("Error in setting up network connectivity", err)
-		return
-	}
 	if err = replMgr.StartBootstrapPhase(); err != nil {
 		log.Println("Error in bootstrap phase", err)
 		return
