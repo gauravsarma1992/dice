@@ -14,7 +14,7 @@ type (
 		Node *Node `json:"node"`
 	}
 	PingResponse struct {
-		NodeID NodeID `json:"node_id"`
+		Node *Node `json:"node"`
 	}
 
 	// ClusterDiscovery
@@ -36,12 +36,14 @@ func NewBootstrapManager(ctx context.Context) (bootstrapMgr *BootstrapManager, e
 
 func (bootstrapMgr *BootstrapManager) PingHandler(reqMsg *Message) (respMsg *Message, err error) {
 	// Get the local node ID from the context
+	reqMsg.Remote.NodeID = bootstrapMgr.replMgr.localNode.ID
+
 	respMsg = NewMessage(
 		InfoMessageGroup,
 		PingMessageType,
-		reqMsg.RemoteNodeID,
-		bootstrapMgr.replMgr.localNode.ID,
-		&PingResponse{NodeID: bootstrapMgr.replMgr.localNode.ID},
+		reqMsg.Remote,
+		reqMsg.Local,
+		&PingResponse{Node: bootstrapMgr.replMgr.localNode},
 	)
 	return
 }
@@ -67,8 +69,8 @@ func (bootstrapMgr *BootstrapManager) ClusterDiscoveryHandler(reqMsg *Message) (
 	respMsg = NewMessage(
 		InfoMessageGroup,
 		ClusterDiscoveryMessageType,
-		reqMsg.RemoteNodeID,
-		bootstrapMgr.replMgr.localNode.ID,
+		reqMsg.Remote,
+		bootstrapMgr.replMgr.localNode.GetLocalUser(),
 		&ClusterDiscoveryResponse{Nodes: nodes},
 	)
 	return

@@ -31,9 +31,9 @@ func (hbMgr *HeartbeatManager) HeartbeatHandler(reqMsg *Message) (respMsg *Messa
 	respMsg = NewMessage(
 		InfoMessageGroup,
 		HeartbeatMessageType,
-		reqMsg.RemoteNodeID,
-		reqMsg.LocalNodeID,
-		&HeartbeatResponseMsg{NodeID: reqMsg.RemoteNodeID},
+		reqMsg.Remote,
+		reqMsg.Local,
+		&HeartbeatResponseMsg{NodeID: reqMsg.Remote.NodeID},
 	)
 	return
 }
@@ -45,7 +45,6 @@ func (hbMgr *HeartbeatManager) sendHeartbeat() (respMsg *Message, err error) {
 	if nodes, err = hbMgr.replMgr.cluster.GetNodes(); err != nil {
 		return
 	}
-	log.Println("Starting heartbeats message", nodes)
 	for _, node := range nodes {
 		if node.ID == hbMgr.replMgr.localNode.ID {
 			continue
@@ -53,14 +52,14 @@ func (hbMgr *HeartbeatManager) sendHeartbeat() (respMsg *Message, err error) {
 		heartbeatReqMsg := NewMessage(
 			InfoMessageGroup,
 			HeartbeatMessageType,
-			hbMgr.replMgr.localNode.ID,
-			node.ID,
+			hbMgr.replMgr.localNode.GetLocalUser(),
+			node.GetLocalUser(),
 			&HeartbeatRequestMsg{
 				Node: hbMgr.replMgr.localNode,
 			},
 		)
 		heartbeatRespMsg := &Message{}
-		log.Println("Sending heartbeats message", heartbeatReqMsg)
+		log.Println("Sending heartbeats message from node", hbMgr.replMgr.localNode, heartbeatReqMsg)
 		if heartbeatRespMsg, err = hbMgr.replMgr.transportMgr.Send(heartbeatReqMsg); err != nil {
 			return
 		}
