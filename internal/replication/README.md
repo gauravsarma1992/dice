@@ -13,3 +13,10 @@ understand if the system is working appropriately.
 - Induce different health based events specifically for a node 
 - Simulate elections
 - Simulate WAL read/write and rollback operations
+
+## TODO
+- Heartbeats to be sent periodically
+- Cluster discovery messages to be sent periodically
+- Health tracking
+- WAL interfaces
+- Election interfaces

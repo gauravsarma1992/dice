@@ -148,7 +148,7 @@ func (httpTransport *HttpTransport) messageHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	log.Println("Received message at server:", receivedMsg)
+	//log.Println("Received message at server:", receivedMsg)
 	if msgHandler, isPresent = httpTransport.replMgr.transportMgr.msgHandlers[receivedMsg.Type]; !isPresent {
 		err = errors.New("Message handler not set")
 		log.Println("failed to fetch message handler", err)

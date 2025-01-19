@@ -38,13 +38,16 @@ func (cluster *Cluster) AddNode(node *Node) (err error) {
 	if cluster.localNode == nil {
 		cluster.localNode = cluster.replMgr.localNode
 	}
-	log.Println("Adding node to cluster", node)
-
 	// Skip if the node is the local node
 	if node.ID == cluster.localNode.ID {
 		return
 	}
+	// Log if the node is not present in the cluster
+	if _, isPresent := cluster.nodes[node.ID]; !isPresent {
+		log.Println("Adding node to cluster", node)
+	}
 	cluster.nodes[node.ID] = node
+
 	return
 }
 

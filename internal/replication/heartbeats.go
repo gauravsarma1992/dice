@@ -28,6 +28,17 @@ func NewHeartbeatManager(ctx context.Context) (hbMgr *HeartbeatManager, err erro
 }
 
 func (hbMgr *HeartbeatManager) HeartbeatHandler(reqMsg *Message) (respMsg *Message, err error) {
+	var (
+		heartbeatReqMsg *HeartbeatRequestMsg
+	)
+	heartbeatReqMsg = &HeartbeatRequestMsg{}
+	if err = reqMsg.FillValue(heartbeatReqMsg); err != nil {
+		return
+	}
+	if err = hbMgr.replMgr.cluster.Update([]*Node{heartbeatReqMsg.Node}); err != nil {
+		return
+	}
+
 	respMsg = NewMessage(
 		InfoMessageGroup,
 		HeartbeatMessageType,
@@ -38,14 +49,16 @@ func (hbMgr *HeartbeatManager) HeartbeatHandler(reqMsg *Message) (respMsg *Messa
 	return
 }
 
-func (hbMgr *HeartbeatManager) sendHeartbeat() (respMsg *Message, err error) {
+func (hbMgr *HeartbeatManager) sendHeartbeat() (err error) {
 	var (
 		nodes []*Node
 	)
 	nodes = hbMgr.replMgr.cluster.GetNodes()
 
+	//log.Println("Sending heartbeat from node", hbMgr.replMgr.localNode, "to nodes - ", len(nodes))
 	for _, node := range nodes {
 		if node.ID == hbMgr.replMgr.localNode.ID {
+			log.Println("Skipping heartbeat to local node", node)
 			continue
 		}
 		heartbeatReqMsg := NewMessage(
@@ -57,12 +70,9 @@ func (hbMgr *HeartbeatManager) sendHeartbeat() (respMsg *Message, err error) {
 				Node: hbMgr.replMgr.localNode,
 			},
 		)
-		heartbeatRespMsg := &Message{}
-		log.Println("Sending heartbeats message from node", heartbeatReqMsg)
-		if heartbeatRespMsg, err = hbMgr.replMgr.transportMgr.Send(heartbeatReqMsg); err != nil {
+		if _, err = hbMgr.replMgr.transportMgr.Send(heartbeatReqMsg); err != nil {
 			return
 		}
-		log.Println(heartbeatRespMsg)
 	}
 	return
 }
@@ -74,8 +84,7 @@ func (hbMgr *HeartbeatManager) Start() (err error) {
 		case <-hbMgr.ctx.Done():
 			return
 		case <-ticker.C:
-
-			if _, err = hbMgr.sendHeartbeat(); err != nil {
+			if err = hbMgr.sendHeartbeat(); err != nil {
 				log.Println("error in sending heartbeat", err)
 				return
 			}
