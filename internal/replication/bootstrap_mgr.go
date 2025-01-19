@@ -31,6 +31,12 @@ func NewBootstrapManager(ctx context.Context) (bootstrapMgr *BootstrapManager, e
 		ctx: ctx,
 	}
 	bootstrapMgr.replMgr = ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
+	if bootstrapMgr.replMgr.localNode, err = NewNode(bootstrapMgr.ctx, bootstrapMgr.replMgr.config.NodeConfig); err != nil {
+		return
+	}
+	if err = bootstrapMgr.replMgr.localNode.Boot(); err != nil {
+		return
+	}
 	return
 }
 
@@ -55,14 +61,14 @@ func (bootstrapMgr *BootstrapManager) ClusterDiscoveryHandler(reqMsg *Message) (
 		clusterDiscoveryMsg *ClusterDiscoveryRequest
 	)
 	// Get the cluster nodes
-	if nodes, err = bootstrapMgr.replMgr.cluster.GetNodes(); err != nil {
-		return
-	}
+	nodes = bootstrapMgr.replMgr.cluster.GetNodes()
+
 	clusterDiscoveryMsg = &ClusterDiscoveryRequest{}
 	if err = reqMsg.FillValue(clusterDiscoveryMsg); err != nil {
 		return
 	}
 	remoteNode = clusterDiscoveryMsg.Node
+	// Adding the node in the remote node's cluster
 	if err = bootstrapMgr.replMgr.cluster.Update([]*Node{remoteNode}); err != nil {
 		return
 	}
@@ -80,15 +86,10 @@ func (bootstrapMgr *BootstrapManager) Start() (err error) {
 	var (
 		discoveredNodes []*Node
 	)
-	if bootstrapMgr.replMgr.localNode, err = NewNode(bootstrapMgr.ctx, bootstrapMgr.replMgr.config.NodeConfig); err != nil {
-		return
-	}
-	if err = bootstrapMgr.replMgr.localNode.Boot(); err != nil {
-		return
-	}
 	if discoveredNodes, err = bootstrapMgr.replMgr.localNode.ConnectToRemoteNode(); err != nil {
 		return
 	}
+	// Adding the node in the local node's cluster
 	if err = bootstrapMgr.replMgr.cluster.Update(discoveredNodes); err != nil {
 		return
 	}

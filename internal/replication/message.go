@@ -72,7 +72,7 @@ func NewMessage(group MessageGroupT, msgType MessageTypeT, localUser *MessageUse
 
 func (msg *Message) String() string {
 	return fmt.Sprintf(
-		"ID: %d, Group: %d, Type: %d, Local: %s, Remote: %s, Value: %s",
+		"Message ID: %d, Group: %d, Type: %d, Local User: %s, Remote User: %s, Value: %s",
 		msg.ID, msg.Group, msg.Type, msg.Local, msg.Remote, msg.Value,
 	)
 }

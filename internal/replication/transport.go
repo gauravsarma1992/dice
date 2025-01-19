@@ -21,11 +21,10 @@ type (
 	}
 
 	HttpTransport struct {
-		ctx              context.Context
-		client           *http.Client
-		server           *gin.Engine
-		transportManager *TransportManager
-		replMgr          *ReplicationManager
+		ctx     context.Context
+		client  *http.Client
+		server  *gin.Engine
+		replMgr *ReplicationManager
 	}
 )
 
@@ -44,7 +43,6 @@ func NewHttpTransport(ctx context.Context, node *Node) (httpTransport *HttpTrans
 		server: gin.Default(),
 	}
 	httpTransport.replMgr = ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
-	httpTransport.transportManager = httpTransport.replMgr.transportMgr
 
 	if err = httpTransport.setup(); err != nil {
 		return
@@ -85,8 +83,11 @@ func (httpTransport *HttpTransport) Send(reqMsg *Message) (respMsg *Message, err
 	var (
 		remoteAddr *NodeAddr
 	)
-	if remoteAddr, err = httpTransport.transportManager.ConvertNodeToAddr(reqMsg.Remote.NodeID); err != nil {
-		return
+	remoteAddr = reqMsg.Remote.Addr
+	if remoteAddr == nil {
+		if remoteAddr, err = httpTransport.replMgr.transportMgr.ConvertNodeToAddr(reqMsg.Remote.NodeID); err != nil {
+			return
+		}
 	}
 	if respMsg, err = httpTransport.send(remoteAddr, reqMsg); err != nil {
 		return
@@ -148,7 +149,7 @@ func (httpTransport *HttpTransport) messageHandler(c *gin.Context) {
 		return
 	}
 	log.Println("Received message at server:", receivedMsg)
-	if msgHandler, isPresent = httpTransport.transportManager.msgHandlers[receivedMsg.Type]; !isPresent {
+	if msgHandler, isPresent = httpTransport.replMgr.transportMgr.msgHandlers[receivedMsg.Type]; !isPresent {
 		err = errors.New("Message handler not set")
 		log.Println("failed to fetch message handler", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -173,7 +174,7 @@ func (httpTransport *HttpTransport) run() (err error) {
 				httpTransport.replMgr.localNode.Config.Local.Port,
 			),
 		); err != nil {
-			log.Println("http transport failed")
+			log.Println("http transport failed", err)
 		}
 	}()
 	time.Sleep(1 * time.Second)

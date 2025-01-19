@@ -2,7 +2,7 @@ package replication
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"sync"
 
 	"errors"
@@ -17,9 +17,10 @@ type (
 	TransportManager struct {
 		ctx context.Context
 
-		transportClients map[NodeID]Transport
-		ipToNodeStore    map[*NodeAddr]NodeID
-		nodeToAddrStore  map[NodeID]*NodeAddr
+		addrToNodeStore map[string]NodeID
+		nodeToAddrStore map[NodeID]*NodeAddr
+
+		localTransport Transport
 
 		msgHandlers map[MessageTypeT]MessageHandler
 
@@ -30,14 +31,16 @@ type (
 
 func NewTransportManager(ctx context.Context) (transportManager *TransportManager, err error) {
 	transportManager = &TransportManager{
-		ctx:              ctx,
-		transportClients: make(map[NodeID]Transport, 10),
-		ipToNodeStore:    make(map[*NodeAddr]NodeID, 10),
-		nodeToAddrStore:  make(map[NodeID]*NodeAddr, 10),
-		msgHandlers:      make(map[MessageTypeT]MessageHandler, 10),
-		clientLock:       &sync.RWMutex{},
+		ctx:             ctx,
+		addrToNodeStore: make(map[string]NodeID, 10),
+		nodeToAddrStore: make(map[NodeID]*NodeAddr, 10),
+		msgHandlers:     make(map[MessageTypeT]MessageHandler, 10),
+		clientLock:      &sync.RWMutex{},
 	}
 	transportManager.replMgr = ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
+	if transportManager.localTransport, err = NewTransport(ctx, transportManager.replMgr.localNode); err != nil {
+		return
+	}
 	if err = transportManager.setupMsgHandlers(); err != nil {
 		return
 	}
@@ -57,7 +60,7 @@ func (transportManager *TransportManager) ConvertIpToNode(remoteAddr *NodeAddr) 
 	transportManager.clientLock.RLock()
 	defer transportManager.clientLock.RUnlock()
 
-	if nodeID, isPresent = transportManager.ipToNodeStore[remoteAddr]; isPresent {
+	if nodeID, isPresent = transportManager.addrToNodeStore[remoteAddr.String()]; isPresent {
 		return
 	}
 	return
@@ -70,6 +73,7 @@ func (transportManager *TransportManager) ConvertNodeToAddr(remoteNodeID NodeID)
 	defer transportManager.clientLock.RUnlock()
 
 	if remoteAddr, isPresent = transportManager.nodeToAddrStore[remoteNodeID]; isPresent {
+		err = fmt.Errorf("node is not present in the transport manager %d", remoteNodeID)
 		return
 	}
 	return
@@ -77,14 +81,10 @@ func (transportManager *TransportManager) ConvertNodeToAddr(remoteNodeID NodeID)
 
 func (transportManager *TransportManager) ConnectToNode(remoteAddr *NodeAddr) (remoteNode *Node, err error) {
 	var (
-		transport   Transport
 		pingRespMsg *Message
 		pingResp    *PingResponse
 	)
-	if transport, err = NewTransport(transportManager.ctx, transportManager.replMgr.localNode); err != nil {
-		return
-	}
-	if pingRespMsg, err = transport.Ping(remoteAddr); err != nil {
+	if pingRespMsg, err = transportManager.localTransport.Ping(remoteAddr); err != nil {
 		return
 	}
 	pingResp = &PingResponse{}
@@ -92,69 +92,24 @@ func (transportManager *TransportManager) ConnectToNode(remoteAddr *NodeAddr) (r
 		return
 	}
 	remoteNode = pingResp.Node
-	log.Println("Connected to remote node", pingRespMsg, remoteNode)
 
-	if err = transportManager.AddTransportClient(remoteNode, remoteAddr, transport); err != nil {
+	if err = transportManager.UpdateTransportMappings(remoteNode, remoteAddr); err != nil {
 		return
 	}
 	return
 }
 
-func (transportManager *TransportManager) updateIpToNodeMapping(remoteAddr *NodeAddr, remoteNodeID NodeID) (err error) {
+func (transportManager *TransportManager) UpdateTransportMappings(node *Node, remoteAddr *NodeAddr) (err error) {
 	transportManager.clientLock.Lock()
 	defer transportManager.clientLock.Unlock()
 
-	transportManager.ipToNodeStore[remoteAddr] = remoteNodeID
-	return
-}
-
-func (transportManager *TransportManager) updateNodeToIpMapping(remoteNodeID NodeID, remoteAddr *NodeAddr) (err error) {
-	transportManager.clientLock.Lock()
-	defer transportManager.clientLock.Unlock()
-
-	transportManager.nodeToAddrStore[remoteNodeID] = remoteAddr
-	return
-}
-
-func (transportManager *TransportManager) AddTransportClient(node *Node, remoteAddr *NodeAddr, transport Transport) (err error) {
-	transportManager.clientLock.Lock()
-	transportManager.transportClients[node.ID] = transport
-	transportManager.clientLock.Unlock()
-
-	transportManager.updateIpToNodeMapping(remoteAddr, node.ID)
-	transportManager.updateNodeToIpMapping(node.ID, remoteAddr)
-
-	return
-}
-
-func (transportManager *TransportManager) GetTransportClient(nodeID NodeID) (transport Transport, err error) {
-	transportManager.clientLock.RLock()
-	defer transportManager.clientLock.RUnlock()
-
-	transport, ok := transportManager.transportClients[nodeID]
-	if !ok {
-		err = ErrTransportClientNotFoundError
-		return
-	}
-	return
-}
-
-func (transportManager *TransportManager) CreateAndGetTransportClient(nodeID NodeID) (transport Transport, err error) {
+	transportManager.addrToNodeStore[remoteAddr.String()] = node.ID
+	transportManager.nodeToAddrStore[node.ID] = remoteAddr
 	return
 }
 
 func (transportManager *TransportManager) Send(reqMsg *Message) (respMsg *Message, err error) {
-	var (
-		remoteNodeTransport Transport
-	)
-	if remoteNodeTransport, err = transportManager.GetTransportClient(reqMsg.Remote.NodeID); err != nil {
-		log.Println("transport client not found, creating transport client", err)
-		if remoteNodeTransport, err = transportManager.CreateAndGetTransportClient(reqMsg.Remote.NodeID); err != nil {
-			return
-		}
-		return
-	}
-	if respMsg, err = remoteNodeTransport.Send(reqMsg); err != nil {
+	if respMsg, err = transportManager.localTransport.Send(reqMsg); err != nil {
 		return
 	}
 	return

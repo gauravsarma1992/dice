@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -25,7 +26,7 @@ const (
 )
 
 var (
-	SameNodeError = fmt.Errorf("remote node is the same as the local node")
+	SameNodeError = fmt.Errorf("errored because remote node is the same as the local node")
 )
 
 type (
@@ -43,9 +44,8 @@ type (
 		Phase    NodePhaseT `json:"phase"`
 		NodeType NodeTypeT  `json:"node_type"`
 
-		transportManager *TransportManager
-		replMgr          *ReplicationManager
-		Config           *NodeConfig
+		replMgr *ReplicationManager
+		Config  *NodeConfig
 	}
 	NodeAddr struct {
 		Host string `json:"host"`
@@ -66,14 +66,26 @@ type (
 
 func (node *Node) String() string {
 	return fmt.Sprintf(
-		"ID: %d, State: %d, Phase: %d, Type: %d, Config: %s",
+		"Node ID: %d, State: %d, Phase: %d, Type: %d, Config: %s",
 		node.ID, node.State, node.Phase, node.NodeType, node.Config,
 	)
 }
 
+func (addr *NodeAddr) String() string {
+	return fmt.Sprintf("%s-%s", addr.Host, addr.Port)
+}
+
+func (addr NodeAddr) FromString(addrStr string) *NodeAddr {
+	addrParts := strings.Split(addrStr, "-")
+	return &NodeAddr{
+		Host: addrParts[0],
+		Port: addrParts[1],
+	}
+}
+
 func (nodeConfig *NodeConfig) String() string {
 	return fmt.Sprintf(
-		"LocalHost: %s, LocalPort: %s, RemoteHost: %s, RemotePort: %s",
+		"NodeConfig Local Host: %s, Local Port: %s, Remote Host: %s, Remote Port: %s",
 		nodeConfig.Local.Host,
 		nodeConfig.Local.Port,
 		nodeConfig.Remote.Host,
@@ -105,7 +117,6 @@ func NewNode(ctx context.Context, config *NodeConfig) (node *Node, err error) {
 		NodeType: NodeTypeHidden,
 	}
 	node.replMgr = ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
-	node.transportManager = node.replMgr.transportMgr
 	return
 }
 
@@ -141,12 +152,20 @@ func (node *Node) GetLocalUser() (msgUser *MessageUser) {
 	return
 }
 
+func (node *Node) GetRemoteUser() (msgUser *MessageUser) {
+	msgUser = &MessageUser{
+		NodeID: node.ID,
+		Addr:   node.Config.Remote,
+	}
+	return
+}
+
 func (node *Node) ConnectToRemoteNode() (nodes []*Node, err error) {
 	var (
 		respMsg    *Message
 		remoteNode *Node
 	)
-	if remoteNode, err = node.transportManager.ConnectToNode(node.Config.Remote); err != nil {
+	if remoteNode, err = node.replMgr.transportMgr.ConnectToNode(node.Config.Remote); err != nil {
 		return
 	}
 	if node.ID == remoteNode.ID {
@@ -160,7 +179,7 @@ func (node *Node) ConnectToRemoteNode() (nodes []*Node, err error) {
 		remoteNode.GetLocalUser(),
 		&ClusterDiscoveryRequest{Node: node},
 	)
-	if respMsg, err = node.transportManager.Send(clusterDiscoveryMsg); err != nil {
+	if respMsg, err = node.replMgr.transportMgr.Send(clusterDiscoveryMsg); err != nil {
 		return
 	}
 	clusterDiscoveryResp := &ClusterDiscoveryResponse{}
