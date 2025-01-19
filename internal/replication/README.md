@@ -15,8 +15,6 @@ understand if the system is working appropriately.
 - Simulate WAL read/write and rollback operations
 
 ## TODO
-- Heartbeats to be sent periodically
-- Cluster discovery messages to be sent periodically
+- Election interfaces
 - Health tracking
 - WAL interfaces
-- Election interfaces
