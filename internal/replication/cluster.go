@@ -48,7 +48,7 @@ func (cluster *Cluster) AddNode(node *Node) (err error) {
 	return
 }
 
-func (cluster *Cluster) GetNodes() (nodes []*Node, err error) {
+func (cluster *Cluster) GetNodes() (nodes []*Node) {
 	cluster.clusterLock.RLock()
 	defer cluster.clusterLock.RUnlock()
 
