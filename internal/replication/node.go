@@ -152,41 +152,10 @@ func (node *Node) GetLocalUser() (msgUser *MessageUser) {
 	return
 }
 
-func (node *Node) GetRemoteUser() (msgUser *MessageUser) {
-	msgUser = &MessageUser{
-		NodeID: node.ID,
-		Addr:   node.Config.Remote,
-	}
-	return
-}
-
-func (node *Node) ConnectToRemoteNode() (nodes []*Node, err error) {
-	var (
-		respMsg    *Message
-		remoteNode *Node
-	)
+func (node *Node) ConnectToRemoteNode() (remoteNode *Node, err error) {
 	if remoteNode, err = node.replMgr.transportMgr.ConnectToNode(node.Config.Remote); err != nil {
 		return
 	}
-	if node.ID == remoteNode.ID {
-		log.Println(SameNodeError, node.ID, remoteNode.ID)
-		return
-	}
-	clusterDiscoveryMsg := NewMessage(
-		InfoMessageGroup,
-		ClusterDiscoveryMessageType,
-		node.GetLocalUser(),
-		remoteNode.GetLocalUser(),
-		&ClusterDiscoveryRequest{Node: node},
-	)
-	if respMsg, err = node.replMgr.transportMgr.Send(clusterDiscoveryMsg); err != nil {
-		return
-	}
-	clusterDiscoveryResp := &ClusterDiscoveryResponse{}
-	if err = respMsg.FillValue(clusterDiscoveryResp); err != nil {
-		return
-	}
-	nodes = clusterDiscoveryResp.Nodes
 	return
 }
 

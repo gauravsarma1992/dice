@@ -27,7 +27,9 @@ type (
 	}
 
 	ReplicationConfig struct {
-		NodeConfig *NodeConfig
+		NodeConfig              *NodeConfig
+		HearbeatIntervalInSecs  int `json:"heartbeat_interval_in_secs"`
+		BootstrapIntervalInSecs int `json:"bootstrap_interval_in_secs"`
 	}
 )
 
