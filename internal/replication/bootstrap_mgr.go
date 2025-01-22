@@ -125,7 +125,6 @@ func (bootstrapMgr *BootstrapManager) start() (err error) {
 			}
 		}
 	}
-
 	return
 }
 

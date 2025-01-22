@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -46,6 +47,8 @@ type (
 
 		replMgr *ReplicationManager
 		Config  *NodeConfig
+
+		nodeLock *sync.RWMutex `json:"-"`
 	}
 	NodeAddr struct {
 		Host string `json:"host"`
@@ -115,6 +118,7 @@ func NewNode(ctx context.Context, config *NodeConfig) (node *Node, err error) {
 		State:    NodeStateUnknown,
 		Phase:    BootstrapNodePhase,
 		NodeType: NodeTypeHidden,
+		nodeLock: &sync.RWMutex{},
 	}
 	node.replMgr = ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
 	return
@@ -131,7 +135,7 @@ func (node *Node) verifyConfig() (err error) {
 		err = fmt.Errorf("remote host is not provided for node %d", node.ID)
 		return
 	}
-	// check current server resources
+	// TODO: check current server resources
 	return
 }
 
@@ -156,6 +160,33 @@ func (node *Node) ConnectToRemoteNode() (remoteNode *Node, err error) {
 	if remoteNode, err = node.replMgr.transportMgr.ConnectToNode(node.Config.Remote); err != nil {
 		return
 	}
+	return
+}
+
+func (node *Node) UpdateState(state NodeStateT) {
+	node.nodeLock.Lock()
+	defer node.nodeLock.Unlock()
+
+	node.State = state
+}
+
+func (node *Node) UpdateNodeType(nodeType NodeTypeT) {
+	node.nodeLock.Lock()
+	defer node.nodeLock.Unlock()
+
+	node.NodeType = nodeType
+}
+
+func (node *Node) Activate() (err error) {
+	// Update the node's type
+	if node.Config.Remote.Host == node.Config.Local.Host {
+		node.UpdateNodeType(NodeTypeLeader)
+	} else {
+		node.UpdateNodeType(NodeTypeFollower)
+	}
+
+	// Update the node's status
+	node.UpdateState(NodeStateHealthy)
 	return
 }
 
