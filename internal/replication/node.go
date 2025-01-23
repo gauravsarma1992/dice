@@ -49,6 +49,8 @@ type (
 		Config  *NodeConfig
 
 		nodeLock *sync.RWMutex `json:"-"`
+
+		LastUpdatedAt time.Time `json:"last_updated_at"`
 	}
 	NodeAddr struct {
 		Host string `json:"host"`
@@ -112,13 +114,14 @@ func NewNode(ctx context.Context, config *NodeConfig) (node *Node, err error) {
 		config = DefaultSingleNodeConfig()
 	}
 	node = &Node{
-		ID:       NodeID(time.Now().UnixNano()),
-		ctx:      ctx,
-		Config:   config,
-		State:    NodeStateUnknown,
-		Phase:    BootstrapNodePhase,
-		NodeType: NodeTypeHidden,
-		nodeLock: &sync.RWMutex{},
+		ID:            NodeID(time.Now().UnixNano()),
+		ctx:           ctx,
+		Config:        config,
+		State:         NodeStateUnknown,
+		Phase:         BootstrapNodePhase,
+		NodeType:      NodeTypeHidden,
+		nodeLock:      &sync.RWMutex{},
+		LastUpdatedAt: time.Now().UTC(),
 	}
 	node.replMgr = ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
 	return
@@ -168,6 +171,7 @@ func (node *Node) UpdateState(state NodeStateT) {
 	defer node.nodeLock.Unlock()
 
 	node.State = state
+	node.LastUpdatedAt = time.Now().UTC()
 }
 
 func (node *Node) UpdateNodeType(nodeType NodeTypeT) {
@@ -175,6 +179,7 @@ func (node *Node) UpdateNodeType(nodeType NodeTypeT) {
 	defer node.nodeLock.Unlock()
 
 	node.NodeType = nodeType
+	node.LastUpdatedAt = time.Now().UTC()
 }
 
 func (node *Node) Activate() (err error) {
@@ -187,6 +192,7 @@ func (node *Node) Activate() (err error) {
 
 	// Update the node's status
 	node.UpdateState(NodeStateHealthy)
+
 	return
 }
 

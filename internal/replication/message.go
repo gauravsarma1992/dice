@@ -14,9 +14,11 @@ const (
 	HeartbeatMessageGroup   MessageGroupT = MessageGroupT(2)
 
 	// Message Types
-	PingMessageType             MessageTypeT = MessageTypeT(0)
-	ClusterDiscoveryMessageType MessageTypeT = MessageTypeT(1)
-	HeartbeatMessageType        MessageTypeT = MessageTypeT(2)
+	PingMessageType                MessageTypeT = MessageTypeT(0)
+	ClusterDiscoveryMessageType    MessageTypeT = MessageTypeT(1)
+	HeartbeatMessageType           MessageTypeT = MessageTypeT(2)
+	DataReplicationPushMessageType MessageTypeT = MessageTypeT(3)
+	DataReplicationPullMessageType MessageTypeT = MessageTypeT(4)
 )
 
 type (

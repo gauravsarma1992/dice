@@ -59,12 +59,9 @@ func (bootstrapMgr *BootstrapManager) PingHandler(reqMsg *Message) (respMsg *Mes
 
 func (bootstrapMgr *BootstrapManager) ClusterDiscoveryHandler(reqMsg *Message) (respMsg *Message, err error) {
 	var (
-		nodes               []*Node
 		remoteNode          *Node
 		clusterDiscoveryMsg *ClusterDiscoveryRequest
 	)
-	// Get the cluster nodes
-	nodes = bootstrapMgr.replMgr.cluster.GetNodes()
 
 	clusterDiscoveryMsg = &ClusterDiscoveryRequest{}
 	if err = reqMsg.FillValue(clusterDiscoveryMsg); err != nil {
@@ -80,7 +77,7 @@ func (bootstrapMgr *BootstrapManager) ClusterDiscoveryHandler(reqMsg *Message) (
 		ClusterDiscoveryMessageType,
 		reqMsg.Remote,
 		bootstrapMgr.replMgr.localNode.GetLocalUser(),
-		&ClusterDiscoveryResponse{Nodes: nodes},
+		&ClusterDiscoveryResponse{Nodes: bootstrapMgr.replMgr.cluster.GetNodes()},
 	)
 	return
 }

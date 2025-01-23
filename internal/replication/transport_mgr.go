@@ -51,6 +51,7 @@ func (transportManager *TransportManager) setupMsgHandlers() (err error) {
 	transportManager.msgHandlers[PingMessageType] = transportManager.replMgr.bootstrapMgr.PingHandler
 	transportManager.msgHandlers[ClusterDiscoveryMessageType] = transportManager.replMgr.bootstrapMgr.ClusterDiscoveryHandler
 	transportManager.msgHandlers[HeartbeatMessageType] = transportManager.replMgr.hbMgr.HeartbeatHandler
+	transportManager.msgHandlers[DataReplicationPushMessageType] = transportManager.replMgr.hbMgr.HeartbeatHandler
 	return
 }
 

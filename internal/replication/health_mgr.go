@@ -109,14 +109,16 @@ func (healthMgr *HealthManager) CheckHealth() (err error) {
 	if healthMgr.health, err = healthMgr.updateHealth(); err != nil {
 		return
 	}
-	checkedState = NodeStateHealthy
 	if err = healthMgr.compareWithLimits(); err != nil {
 		log.Println("error while checking health", err)
 		checkedState = NodeStateUnhealthy
+	} else {
+		checkedState = NodeStateHealthy
 	}
 	if checkedState != healthMgr.lastUpdatedState {
 		log.Println("Node state changed to", checkedState)
 		healthMgr.replMgr.localNode.UpdateState(checkedState)
+		healthMgr.lastUpdatedState = checkedState
 	}
 
 	return

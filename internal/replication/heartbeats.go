@@ -50,13 +50,8 @@ func (hbMgr *HeartbeatManager) HeartbeatHandler(reqMsg *Message) (respMsg *Messa
 }
 
 func (hbMgr *HeartbeatManager) sendHeartbeat() (err error) {
-	var (
-		nodes []*Node
-	)
-	nodes = hbMgr.replMgr.cluster.GetNodes()
-
 	//log.Println("Sending heartbeat from node", hbMgr.replMgr.localNode, "to nodes - ", len(nodes))
-	for _, node := range nodes {
+	for _, node := range hbMgr.replMgr.cluster.GetRemoteNodes() {
 		if node.ID == hbMgr.replMgr.localNode.ID {
 			log.Println("Skipping heartbeat to local node", node)
 			continue
