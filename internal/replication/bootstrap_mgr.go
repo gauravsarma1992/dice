@@ -129,6 +129,9 @@ func (bootstrapMgr *BootstrapManager) Start() (err error) {
 	if bootstrapMgr.remoteNode, err = bootstrapMgr.replMgr.localNode.ConnectToRemoteNode(); err != nil {
 		return
 	}
+	// Activate the node
+	bootstrapMgr.replMgr.localNode.Activate()
+
 	go func() {
 		if err = bootstrapMgr.start(); err != nil {
 			log.Println("Error in bootstrap manager", err)

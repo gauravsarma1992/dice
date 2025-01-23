@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dicedb/dice/internal/replication"
+	"github.com/dicedb/dice/internal/replication/testsuite/tempwal"
 )
 
 const (
@@ -16,6 +17,7 @@ type (
 	ReplicationTestSuite struct {
 		ctx        context.Context
 		cancelFunc context.CancelFunc
+		wal        replication.ReplicationWAL
 
 		config *TestConfig
 
@@ -32,6 +34,11 @@ func DefaultTestConfig() *TestConfig {
 	}
 }
 
+func DefaultWAL(ctx context.Context) (wal replication.ReplicationWAL) {
+	wal, _ = tempwal.NewLogTempWAL(ctx)
+	return
+}
+
 func NewReplicationTestSuite(config *TestConfig) (replSuite *ReplicationTestSuite, err error) {
 	if config == nil {
 		config = DefaultTestConfig()
@@ -42,6 +49,7 @@ func NewReplicationTestSuite(config *TestConfig) (replSuite *ReplicationTestSuit
 		ctx:        ctx,
 		cancelFunc: cancelFunc,
 		config:     config,
+		wal:        DefaultWAL(ctx),
 	}
 	return
 }
@@ -62,7 +70,9 @@ func (replSuite *ReplicationTestSuite) createAndRunNodes() (err error) {
 			NodeConfig: nodeConfig,
 		}
 
-		if replMgr, err = replication.NewReplicationManager(replSuite.ctx, replConfig); err != nil {
+		if replMgr, err = replication.NewReplicationManager(replSuite.ctx,
+			replConfig, replSuite.wal); err != nil {
+
 			return
 		}
 		go func() {

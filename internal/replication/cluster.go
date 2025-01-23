@@ -10,10 +10,8 @@ type (
 	Cluster struct {
 		ctx context.Context
 
-		localNode  *Node
 		leaderNode *Node
-
-		nodes map[NodeID]*Node
+		nodes      map[NodeID]*Node
 
 		clusterLock *sync.RWMutex
 
@@ -36,7 +34,7 @@ func (cluster *Cluster) AddNode(node *Node) (err error) {
 	defer cluster.clusterLock.Unlock()
 
 	// Skip if the node is the local node
-	if node.ID == cluster.localNode.ID {
+	if node.ID == cluster.replMgr.localNode.ID {
 		return
 	}
 	// Log if the node is not present in the cluster
@@ -56,7 +54,7 @@ func (cluster *Cluster) GetRemoteNodes() (nodes []*Node) {
 	defer cluster.clusterLock.RUnlock()
 
 	for _, node := range cluster.nodes {
-		if node.ID == cluster.localNode.ID {
+		if node.ID == cluster.replMgr.localNode.ID {
 			continue
 		}
 		nodes = append(nodes, node)
@@ -79,7 +77,7 @@ func (cluster *Cluster) RemoveNode(node *Node) (err error) {
 	defer cluster.clusterLock.Unlock()
 
 	// Skip if the node is the local node
-	if node.ID == cluster.localNode.ID {
+	if node.ID == cluster.replMgr.localNode.ID {
 		return
 	}
 	cluster.nodes[node.ID] = node
@@ -89,11 +87,7 @@ func (cluster *Cluster) RemoveNode(node *Node) (err error) {
 
 func (cluster *Cluster) Update(receivedNodes []*Node) (err error) {
 	// TODO: Remove deleted nodes
-	if cluster.localNode == nil {
-		cluster.localNode = cluster.replMgr.localNode
-	}
 	for _, node := range receivedNodes {
-
 		if err = cluster.AddNode(node); err != nil {
 			log.Printf("unable to add node %d to the cluster", node.ID)
 			continue

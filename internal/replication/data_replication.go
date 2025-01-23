@@ -43,15 +43,13 @@ type (
 	}
 )
 
-func NewDataReplicationManager(ctx context.Context) (drMgr *DataReplicationManager, err error) {
+func NewDataReplicationManager(ctx context.Context, wal ReplicationWAL) (drMgr *DataReplicationManager, err error) {
 	drMgr = &DataReplicationManager{
 		ctx:          ctx,
-		writeConcern: WriteConcernMajority,
+		wal:          wal,
+		writeConcern: WriteConcernNone,
 	}
 	drMgr.replMgr = ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
-	if drMgr.wal, err = NewLogTempWAL(ctx); err != nil {
-		return
-	}
 	return
 }
 
@@ -64,7 +62,7 @@ func (drMgr *DataReplicationManager) PersistLocally(logs []WALLog) (err error) {
 
 func (drMgr *DataReplicationManager) getCurrentLogIndexFromLogs(logs []WALLog) (index LogIndex) {
 	if len(logs) == 0 {
-		index = LogIndex("0")
+		index = LogIndex(0)
 		return
 	}
 	index = logs[len(logs)-1].Index
@@ -84,6 +82,7 @@ func (drMgr *DataReplicationManager) DataReplicationPushHandler(reqMsg *Message)
 	if err = drMgr.PersistLocally(dataReplicationPushReq.WALLogs); err != nil {
 		return
 	}
+	log.Println("Received data from remote node", len(dataReplicationPushReq.WALLogs), dataReplicationPushReq.CurrLogIndex, reqMsg.Local)
 	// Send the current log index back to the remote node
 	respMsg = NewMessage(
 		InfoMessageGroup,
@@ -151,11 +150,13 @@ func (drMgr *DataReplicationManager) handleWriteConcerns(errCount int) (err erro
 	return
 }
 
+// TODO: make this async
 func (drMgr *DataReplicationManager) replicateToRemoteNodes(walLogs []WALLog) (err error) {
 	var (
 		errCount int
 	)
 	for _, node := range drMgr.replMgr.cluster.GetRemoteNodes() {
+		log.Println("Replicating data to remote node", node, len(walLogs))
 		if err = drMgr.replicateToNode(node, walLogs); err != nil {
 			errCount += 1
 			log.Println("Error replicating data to remote node", err)
@@ -194,6 +195,7 @@ func (drMgr *DataReplicationManager) pollLocalWAL() (err error) {
 		err = fmt.Errorf(EmptyWALBufferError)
 		return
 	}
+	log.Println("Polling local wal data", len(walLogs))
 	if err = drMgr.Replicate(walLogs); err != nil {
 		log.Println("Error replicating data", err)
 		return
@@ -215,11 +217,7 @@ func (drMgr *DataReplicationManager) Start() (err error) {
 				continue
 			}
 			if err = drMgr.pollLocalWAL(); err != nil {
-				if err == fmt.Errorf(EmptyWALBufferError) {
-					time.Sleep(1 * time.Second)
-					return
-				}
-				log.Println("Error polling local wal data", err)
+				time.Sleep(5 * time.Second)
 				continue
 			}
 		}

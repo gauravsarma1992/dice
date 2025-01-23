@@ -33,7 +33,7 @@ type (
 	}
 )
 
-func NewReplicationManager(ctx context.Context, config *ReplicationConfig) (replMgr *ReplicationManager, err error) {
+func NewReplicationManager(ctx context.Context, config *ReplicationConfig, wal ReplicationWAL) (replMgr *ReplicationManager, err error) {
 	replMgr = &ReplicationManager{
 		config: config,
 	}
@@ -50,6 +50,9 @@ func NewReplicationManager(ctx context.Context, config *ReplicationConfig) (repl
 	if replMgr.healthMgr, err = NewHealthManager(replMgr.ctx); err != nil {
 		return
 	}
+	if replMgr.drMgr, err = NewDataReplicationManager(replMgr.ctx, wal); err != nil {
+		return
+	}
 	if replMgr.transportMgr, err = NewTransportManager(replMgr.ctx); err != nil {
 		return
 	}
@@ -57,9 +60,6 @@ func NewReplicationManager(ctx context.Context, config *ReplicationConfig) (repl
 		return
 	}
 	if replMgr.cluster, err = NewCluster(replMgr.ctx); err != nil {
-		return
-	}
-	if replMgr.drMgr, err = NewDataReplicationManager(replMgr.ctx); err != nil {
 		return
 	}
 	return
