@@ -2,7 +2,6 @@ package replication
 
 import (
 	"context"
-	"log"
 	"time"
 )
 
@@ -35,9 +34,6 @@ func NewBootstrapManager(ctx context.Context) (bootstrapMgr *BootstrapManager, e
 	}
 	bootstrapMgr.replMgr = ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
 	if bootstrapMgr.replMgr.localNode, err = NewNode(bootstrapMgr.ctx, bootstrapMgr.replMgr.config.NodeConfig); err != nil {
-		return
-	}
-	if err = bootstrapMgr.replMgr.localNode.Boot(); err != nil {
 		return
 	}
 	return
@@ -126,6 +122,9 @@ func (bootstrapMgr *BootstrapManager) start() (err error) {
 }
 
 func (bootstrapMgr *BootstrapManager) Start() (err error) {
+	if err = bootstrapMgr.replMgr.localNode.Boot(); err != nil {
+		return
+	}
 	if bootstrapMgr.remoteNode, err = bootstrapMgr.replMgr.localNode.ConnectToRemoteNode(); err != nil {
 		return
 	}
@@ -134,7 +133,7 @@ func (bootstrapMgr *BootstrapManager) Start() (err error) {
 
 	go func() {
 		if err = bootstrapMgr.start(); err != nil {
-			log.Println("Error in bootstrap manager", err)
+			bootstrapMgr.replMgr.log.Println("Error in bootstrap manager", err)
 			return
 		}
 	}()

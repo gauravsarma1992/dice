@@ -144,19 +144,19 @@ func (httpTransport *HttpTransport) messageHandler(c *gin.Context) {
 	)
 	receivedMsg = &Message{}
 	if err = c.ShouldBindJSON(receivedMsg); err != nil {
-		log.Println("json message could not be parsed and failed with error", err)
+		httpTransport.replMgr.log.Println("json message could not be parsed and failed with error", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	//log.Println("Received message at server:", receivedMsg)
+	//httpTransport.replMgr.log.Println("Received message at server:", receivedMsg)
 	if msgHandler, isPresent = httpTransport.replMgr.transportMgr.msgHandlers[receivedMsg.Type]; !isPresent {
 		err = errors.New("Message handler not set")
-		log.Println("failed to fetch message handler", err)
+		httpTransport.replMgr.log.Println("failed to fetch message handler", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if generatedMsg, err = msgHandler(receivedMsg); err != nil {
-		log.Println("message handler failed with error", err)
+		httpTransport.replMgr.log.Println("message handler failed with error", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -174,7 +174,7 @@ func (httpTransport *HttpTransport) run() (err error) {
 				httpTransport.replMgr.localNode.Config.Local.Port,
 			),
 		); err != nil {
-			log.Println("http transport failed", err)
+			httpTransport.replMgr.log.Println("http transport failed", err)
 		}
 	}()
 	time.Sleep(1 * time.Second)

@@ -2,7 +2,6 @@ package tempwal
 
 import (
 	"context"
-	"log"
 	"strconv"
 	"time"
 
@@ -29,7 +28,7 @@ func NewLogTempWAL(ctx context.Context) (logWal *LogTempWAL, err error) {
 
 func (logWal *LogTempWAL) GetLogsAfterIndex(index replication.LogIndex, limit int) (logs []replication.WALLog, err error) {
 	lastLogIdx := replication.LogIndex(0)
-	for idx := logWal.startIdx; idx < logWal.currIdx; idx++ {
+	for idx := replication.LogIndex(index); idx < logWal.currIdx; idx++ {
 		log := logWal.walLogs[idx]
 		if log.Index > index {
 			logs = append(logs, log)
@@ -67,7 +66,6 @@ func (logWal *LogTempWAL) PushData() (err error) {
 				})
 			}
 			logWal.walLogs = append(logWal.walLogs, logs...)
-			log.Println("Pushing logs to WAL", len(logWal.walLogs), logWal.currIdx-logWal.startIdx)
 		}
 
 	}

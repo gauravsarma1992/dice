@@ -2,7 +2,6 @@ package replication
 
 import (
 	"context"
-	"log"
 	"time"
 )
 
@@ -50,10 +49,10 @@ func (hbMgr *HeartbeatManager) HeartbeatHandler(reqMsg *Message) (respMsg *Messa
 }
 
 func (hbMgr *HeartbeatManager) sendHeartbeat() (err error) {
-	//log.Println("Sending heartbeat from node", hbMgr.replMgr.localNode, "to nodes - ", len(nodes))
+	// hbMgr.replMgr.log.Println("Sending heartbeat from node", hbMgr.replMgr.localNode, "to nodes - ", len(nodes))
 	for _, node := range hbMgr.replMgr.cluster.GetRemoteNodes() {
 		if node.ID == hbMgr.replMgr.localNode.ID {
-			log.Println("Skipping heartbeat to local node", node)
+			hbMgr.replMgr.log.Println("Skipping heartbeat to local node", node)
 			continue
 		}
 		heartbeatReqMsg := NewMessage(
@@ -80,7 +79,7 @@ func (hbMgr *HeartbeatManager) Start() (err error) {
 			return
 		case <-ticker.C:
 			if err = hbMgr.sendHeartbeat(); err != nil {
-				log.Println("error in sending heartbeat", err)
+				hbMgr.replMgr.log.Println("error in sending heartbeat", err)
 				return
 			}
 		}

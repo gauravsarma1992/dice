@@ -3,7 +3,6 @@ package replication
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 )
 
@@ -31,6 +30,8 @@ type (
 		replMgr *ReplicationManager
 
 		writeConcern WriteConcernT
+
+		shouldLeaderPushLogs bool
 	}
 
 	DataReplicationPushRequestMsg struct {
@@ -41,13 +42,21 @@ type (
 	DataReplicationPushResponseMsg struct {
 		CurrLogIndex LogIndex `json:"curr_log_index"`
 	}
+	DataReplicationPullRequestMsg struct {
+		CurrLogIndex LogIndex `json:"curr_log_index"`
+	}
+	DataReplicationPullResponseMsg struct {
+		CurrLogIndex LogIndex `json:"curr_log_index"`
+		WALLogs      []WALLog `json:"wal_logs"`
+	}
 )
 
 func NewDataReplicationManager(ctx context.Context, wal ReplicationWAL) (drMgr *DataReplicationManager, err error) {
 	drMgr = &DataReplicationManager{
-		ctx:          ctx,
-		wal:          wal,
-		writeConcern: WriteConcernNone,
+		ctx:                  ctx,
+		wal:                  wal,
+		writeConcern:         WriteConcernNone,
+		shouldLeaderPushLogs: false,
 	}
 	drMgr.replMgr = ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
 	return
@@ -55,6 +64,9 @@ func NewDataReplicationManager(ctx context.Context, wal ReplicationWAL) (drMgr *
 
 func (drMgr *DataReplicationManager) PersistLocally(logs []WALLog) (err error) {
 	if err = drMgr.wal.ApplyLogs(logs); err != nil {
+		return
+	}
+	if drMgr.updateCurrLogIndex(drMgr.getCurrentLogIndexFromLogs(logs)); err != nil {
 		return
 	}
 	return
@@ -66,6 +78,34 @@ func (drMgr *DataReplicationManager) getCurrentLogIndexFromLogs(logs []WALLog) (
 		return
 	}
 	index = logs[len(logs)-1].Index
+	return
+}
+
+func (drMgr *DataReplicationManager) DataReplicationPullHandler(reqMsg *Message) (respMsg *Message, err error) {
+	var (
+		dataReplicationPushReq *DataReplicationPushRequestMsg
+		walLogs                []WALLog
+	)
+	dataReplicationPushReq = &DataReplicationPushRequestMsg{}
+	// Receive the wal logs
+	if err = reqMsg.FillValue(dataReplicationPushReq); err != nil {
+		return
+	}
+	drMgr.replMgr.log.Println("Received data from remote node", len(dataReplicationPushReq.WALLogs), dataReplicationPushReq.CurrLogIndex, reqMsg.Local)
+	if walLogs, err = drMgr.wal.GetLogsAfterIndex(dataReplicationPushReq.CurrLogIndex, 10); err != nil {
+		return
+	}
+	// Send the current log index back to the remote node
+	respMsg = NewMessage(
+		InfoMessageGroup,
+		DataReplicationPushMessageType,
+		drMgr.replMgr.localNode.GetLocalUser(),
+		reqMsg.Local,
+		&DataReplicationPullResponseMsg{
+			CurrLogIndex: drMgr.getCurrentLogIndexFromLogs(dataReplicationPushReq.WALLogs),
+			WALLogs:      walLogs,
+		},
+	)
 	return
 }
 
@@ -82,7 +122,7 @@ func (drMgr *DataReplicationManager) DataReplicationPushHandler(reqMsg *Message)
 	if err = drMgr.PersistLocally(dataReplicationPushReq.WALLogs); err != nil {
 		return
 	}
-	log.Println("Received data from remote node", len(dataReplicationPushReq.WALLogs), dataReplicationPushReq.CurrLogIndex, reqMsg.Local)
+	drMgr.replMgr.log.Println("Received data from remote node", len(dataReplicationPushReq.WALLogs), dataReplicationPushReq.CurrLogIndex, reqMsg.Local)
 	// Send the current log index back to the remote node
 	respMsg = NewMessage(
 		InfoMessageGroup,
@@ -113,7 +153,7 @@ func (drMgr *DataReplicationManager) replicateToNode(node *Node, walLogs []WALLo
 		},
 	)
 	if respMsg, err = drMgr.replMgr.transportMgr.Send(reqMsg); err != nil {
-		log.Println("Error sending data to remote node", err)
+		drMgr.replMgr.log.Println("Error sending data to remote node", err)
 		return
 	}
 	pushResp = &DataReplicationPushResponseMsg{}
@@ -156,10 +196,10 @@ func (drMgr *DataReplicationManager) replicateToRemoteNodes(walLogs []WALLog) (e
 		errCount int
 	)
 	for _, node := range drMgr.replMgr.cluster.GetRemoteNodes() {
-		log.Println("Replicating data to remote node", node, len(walLogs))
+		drMgr.replMgr.log.Println("Replicating data to remote node", node, len(walLogs))
 		if err = drMgr.replicateToNode(node, walLogs); err != nil {
 			errCount += 1
-			log.Println("Error replicating data to remote node", err)
+			drMgr.replMgr.log.Println("Error replicating data to remote node", err)
 			continue
 		}
 	}
@@ -170,8 +210,10 @@ func (drMgr *DataReplicationManager) replicateToRemoteNodes(walLogs []WALLog) (e
 }
 
 func (drMgr *DataReplicationManager) Replicate(walLogs []WALLog) (err error) {
-	if err = drMgr.replicateToRemoteNodes(walLogs); err != nil {
-		return
+	if drMgr.shouldLeaderPushLogs {
+		if err = drMgr.replicateToRemoteNodes(walLogs); err != nil {
+			return
+		}
 	}
 	if err = drMgr.PersistLocally(walLogs); err != nil {
 		return
@@ -195,13 +237,65 @@ func (drMgr *DataReplicationManager) pollLocalWAL() (err error) {
 		err = fmt.Errorf(EmptyWALBufferError)
 		return
 	}
-	log.Println("Polling local wal data", len(walLogs))
+	//log.Println("Polling local wal data", len(walLogs))
 	if err = drMgr.Replicate(walLogs); err != nil {
-		log.Println("Error replicating data", err)
+		drMgr.replMgr.log.Println("Error replicating data", err)
 		return
 	}
 	if err = drMgr.updateCurrLogIndex(drMgr.getCurrentLogIndexFromLogs(walLogs)); err != nil {
 		return
+	}
+	return
+}
+
+func (drMgr *DataReplicationManager) pollLeaderForWAL() (err error) {
+	var (
+		reqMsg     *Message
+		respMsg    *Message
+		leaderNode *Node
+		pullResp   *DataReplicationPushRequestMsg
+	)
+	if leaderNode, err = drMgr.replMgr.cluster.GetLeaderNode(); err != nil {
+		return
+	}
+	reqMsg = NewMessage(
+		InfoMessageGroup,
+		DataReplicationPushMessageType,
+		drMgr.replMgr.localNode.GetLocalUser(),
+		leaderNode.GetLocalUser(),
+		&DataReplicationPushResponseMsg{
+			CurrLogIndex: drMgr.currLogIndex,
+		},
+	)
+	if respMsg, err = drMgr.replMgr.transportMgr.Send(reqMsg); err != nil {
+		drMgr.replMgr.log.Println("Error sending data to remote node", err)
+		return
+	}
+	drMgr.replMgr.log.Println("pulling data from leader node", leaderNode, drMgr.currLogIndex)
+	pullResp = &DataReplicationPushRequestMsg{}
+	if err = respMsg.FillValue(pullResp); err != nil {
+		return
+	}
+	if err = drMgr.PersistLocally(pullResp.WALLogs); err != nil {
+		return
+	}
+	return
+}
+
+func (drMgr *DataReplicationManager) startPollingForLeaderNode() (err error) {
+	for {
+		if err = drMgr.pollLocalWAL(); err != nil {
+			time.Sleep(5 * time.Second)
+		}
+	}
+	return
+}
+
+func (drMgr *DataReplicationManager) startPollingForFollowerNode() (err error) {
+	for {
+		if err = drMgr.pollLeaderForWAL(); err != nil {
+			time.Sleep(5 * time.Second)
+		}
 	}
 	return
 }
@@ -212,13 +306,15 @@ func (drMgr *DataReplicationManager) Start() (err error) {
 		case <-drMgr.ctx.Done():
 			return
 		default:
-			if drMgr.replMgr.localNode.NodeType != NodeTypeLeader {
-				time.Sleep(5 * time.Second)
-				continue
+
+			if drMgr.replMgr.localNode.NodeType == NodeTypeLeader {
+				err = drMgr.startPollingForLeaderNode()
+			} else {
+				err = drMgr.startPollingForFollowerNode()
 			}
-			if err = drMgr.pollLocalWAL(); err != nil {
-				time.Sleep(5 * time.Second)
-				continue
+			if err != nil {
+				drMgr.replMgr.log.Println("Error in data replication manager", err)
+				return
 			}
 		}
 	}

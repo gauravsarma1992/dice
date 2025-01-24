@@ -2,9 +2,13 @@ package replication
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
+	"time"
 )
+
+const ErrNoLeaderNode = "no leader node found"
 
 type (
 	Cluster struct {
@@ -16,6 +20,9 @@ type (
 		clusterLock *sync.RWMutex
 
 		replMgr *ReplicationManager
+
+		lastLeaderChangedAt time.Time
+		lastNodeAddedAt     time.Time
 	}
 )
 
@@ -43,8 +50,40 @@ func (cluster *Cluster) AddNode(node *Node) (err error) {
 			return
 		}
 	}
-	log.Println("Adding node to cluster", node)
+	cluster.replMgr.log.Println("Adding node to cluster", node)
 	cluster.nodes[node.ID] = node
+	cluster.lastNodeAddedAt = time.Now().UTC()
+
+	if node.NodeType == NodeTypeLeader {
+		if cluster.leaderNode != nil && node.ID == cluster.leaderNode.ID {
+			return
+		}
+		if err = cluster.AddLeaderNode(node); err != nil {
+			return
+		}
+		cluster.replMgr.log.Println("Leader node added to the cluster", node)
+	}
+
+	return
+}
+
+func (cluster *Cluster) GetLeaderNode() (node *Node, err error) {
+	cluster.clusterLock.RLock()
+	defer cluster.clusterLock.RUnlock()
+
+	node = cluster.leaderNode
+	if node == nil {
+		err = fmt.Errorf(ErrNoLeaderNode)
+	}
+	return
+}
+
+func (cluster *Cluster) AddLeaderNode(leaderNode *Node) (err error) {
+	cluster.clusterLock.Lock()
+	defer cluster.clusterLock.Unlock()
+
+	cluster.leaderNode = leaderNode
+	cluster.lastLeaderChangedAt = time.Now().UTC()
 
 	return
 }

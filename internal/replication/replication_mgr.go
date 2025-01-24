@@ -2,7 +2,9 @@ package replication
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"os"
 )
 
 const (
@@ -24,6 +26,8 @@ type (
 		drMgr        *DataReplicationManager
 		healthMgr    *HealthManager
 		config       *ReplicationConfig
+
+		log *log.Logger
 	}
 
 	ReplicationConfig struct {
@@ -62,6 +66,9 @@ func NewReplicationManager(ctx context.Context, config *ReplicationConfig, wal R
 	if replMgr.cluster, err = NewCluster(replMgr.ctx); err != nil {
 		return
 	}
+	if replMgr.log = log.New(os.Stderr, fmt.Sprintf("[%d]: ", replMgr.localNode.ID), log.LstdFlags); err != nil {
+		return
+	}
 	return
 }
 
@@ -69,7 +76,7 @@ func (replMgr *ReplicationManager) StartBootstrapPhase() (err error) {
 	if err = replMgr.bootstrapMgr.Start(); err != nil {
 		return
 	}
-	log.Println(
+	replMgr.log.Println(
 		"Bootstrap phase completed. Local node - ",
 		replMgr.localNode,
 		"Discovered nodes -", replMgr.cluster.GetRemoteNodes(),
@@ -78,7 +85,7 @@ func (replMgr *ReplicationManager) StartBootstrapPhase() (err error) {
 }
 
 func (replMgr *ReplicationManager) StartHeartbeats() (err error) {
-	//log.Println("Heartbeats phase started for NodeID -", replMgr.localNode.ID)
+	//replMgr.log.Println("Heartbeats phase started for NodeID -", replMgr.localNode.ID)
 	go replMgr.hbMgr.Start()
 	return
 }
@@ -89,7 +96,7 @@ func (replMgr *ReplicationManager) StartHealthManagerPhase() (err error) {
 }
 
 func (replMgr *ReplicationManager) StartDataReplicationPhase() (err error) {
-	//log.Println("Data replication phase started for NodeID -", replMgr.localNode.ID)
+	//replMgr.log.Println("Data replication phase started for NodeID -", replMgr.localNode.ID)
 	if err = replMgr.drMgr.Start(); err != nil {
 		return
 	}
@@ -97,7 +104,7 @@ func (replMgr *ReplicationManager) StartDataReplicationPhase() (err error) {
 }
 
 func (replMgr *ReplicationManager) StartElectionManager() (err error) {
-	//log.Println("Election manager started for NodeID -", replMgr.localNode.ID)
+	//replMgr.log.Println("Election manager started for NodeID -", replMgr.localNode.ID)
 	if err = replMgr.electionMgr.Start(); err != nil {
 		return
 	}
@@ -106,23 +113,23 @@ func (replMgr *ReplicationManager) StartElectionManager() (err error) {
 
 func (replMgr *ReplicationManager) Run() (err error) {
 	if err = replMgr.StartBootstrapPhase(); err != nil {
-		log.Println("Error in bootstrap phase", err)
+		replMgr.log.Println("Error in bootstrap phase", err)
 		return
 	}
 	if err = replMgr.StartHealthManagerPhase(); err != nil {
-		log.Println("Error in health manager phase", err)
+		replMgr.log.Println("Error in health manager phase", err)
 		return
 	}
 	if err = replMgr.StartHeartbeats(); err != nil {
-		log.Println("Error in heartbeats phase", err)
+		replMgr.log.Println("Error in heartbeats phase", err)
 		return
 	}
 	if err = replMgr.StartDataReplicationPhase(); err != nil {
-		log.Println("Error in data replication phase", err)
+		replMgr.log.Println("Error in data replication phase", err)
 		return
 	}
 	if err = replMgr.StartElectionManager(); err != nil {
-		log.Println("Error in election manager phase", err)
+		replMgr.log.Println("Error in election manager phase", err)
 		return
 	}
 	for {
@@ -131,6 +138,6 @@ func (replMgr *ReplicationManager) Run() (err error) {
 			return
 		}
 	}
-	log.Println("Shutting down replication manager")
+	replMgr.log.Println("Shutting down replication manager")
 	return
 }

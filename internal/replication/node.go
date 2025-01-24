@@ -3,7 +3,6 @@ package replication
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -144,7 +143,7 @@ func (node *Node) verifyConfig() (err error) {
 
 func (node *Node) Boot() (err error) {
 	// Start the node
-	log.Println("Node is booting. Config:", node.ID, node.Config)
+	node.replMgr.log.Println("Node is booting. Config:", node.ID, node.Config)
 	if err = node.verifyConfig(); err != nil {
 		return
 	}
@@ -184,7 +183,7 @@ func (node *Node) UpdateNodeType(nodeType NodeTypeT) {
 
 func (node *Node) Activate() (err error) {
 	// Update the node's type
-	if node.Config.Remote.Host == node.Config.Local.Host {
+	if node.Config.Remote.String() == node.Config.Local.String() {
 		node.UpdateNodeType(NodeTypeLeader)
 	} else {
 		node.UpdateNodeType(NodeTypeFollower)

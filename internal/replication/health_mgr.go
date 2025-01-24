@@ -3,7 +3,6 @@ package replication
 import (
 	"context"
 	"errors"
-	"log"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -110,13 +109,13 @@ func (healthMgr *HealthManager) CheckHealth() (err error) {
 		return
 	}
 	if err = healthMgr.compareWithLimits(); err != nil {
-		log.Println("error while checking health", err)
+		healthMgr.replMgr.log.Println("error while checking health", err)
 		checkedState = NodeStateUnhealthy
 	} else {
 		checkedState = NodeStateHealthy
 	}
 	if checkedState != healthMgr.lastUpdatedState {
-		log.Println("Node state changed to", checkedState)
+		healthMgr.replMgr.log.Println("Node state changed to", checkedState)
 		healthMgr.replMgr.localNode.UpdateState(checkedState)
 		healthMgr.lastUpdatedState = checkedState
 	}
