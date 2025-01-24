@@ -68,6 +68,30 @@ type (
 	}
 )
 
+func (nodeType NodeTypeT) String() string {
+	switch nodeType {
+	case NodeTypeLeader:
+		return "Leader"
+	case NodeTypeFollower:
+		return "Follower"
+	case NodeTypeHidden:
+		return "Hidden"
+	default:
+		return "Unknown"
+	}
+}
+
+func (state NodeStateT) String() string {
+	switch state {
+	case NodeStateHealthy:
+		return "Healthy"
+	case NodeStateUnhealthy:
+		return "Unhealthy"
+	default:
+		return "Unknown"
+	}
+}
+
 func (node *Node) String() string {
 	return fmt.Sprintf(
 		"Node ID: %d, State: %d, Phase: %d, Type: %d, Config: %s",
@@ -179,6 +203,8 @@ func (node *Node) UpdateNodeType(nodeType NodeTypeT) {
 
 	node.NodeType = nodeType
 	node.LastUpdatedAt = time.Now().UTC()
+
+	node.replMgr.log.Println("Node type updated to", nodeType)
 }
 
 func (node *Node) Activate() (err error) {

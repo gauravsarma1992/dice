@@ -76,11 +76,11 @@ func (replMgr *ReplicationManager) StartBootstrapPhase() (err error) {
 	if err = replMgr.bootstrapMgr.Start(); err != nil {
 		return
 	}
-	replMgr.log.Println(
-		"Bootstrap phase completed. Local node - ",
-		replMgr.localNode,
-		"Discovered nodes -", replMgr.cluster.GetRemoteNodes(),
-	)
+	//replMgr.log.Println(
+	//	"Bootstrap phase completed. Local node - ",
+	//	replMgr.localNode,
+	//	"Discovered nodes -", replMgr.cluster.GetRemoteNodes(),
+	//)
 	return
 }
 

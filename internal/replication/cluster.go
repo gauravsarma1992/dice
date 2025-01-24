@@ -54,16 +54,6 @@ func (cluster *Cluster) AddNode(node *Node) (err error) {
 	cluster.nodes[node.ID] = node
 	cluster.lastNodeAddedAt = time.Now().UTC()
 
-	if node.NodeType == NodeTypeLeader {
-		if cluster.leaderNode != nil && node.ID == cluster.leaderNode.ID {
-			return
-		}
-		if err = cluster.AddLeaderNode(node); err != nil {
-			return
-		}
-		cluster.replMgr.log.Println("Leader node added to the cluster", node)
-	}
-
 	return
 }
 
@@ -82,8 +72,16 @@ func (cluster *Cluster) AddLeaderNode(leaderNode *Node) (err error) {
 	cluster.clusterLock.Lock()
 	defer cluster.clusterLock.Unlock()
 
+	if leaderNode.NodeType != NodeTypeLeader {
+		return
+	}
+	if cluster.leaderNode != nil && leaderNode.ID == cluster.leaderNode.ID {
+		return
+	}
+
 	cluster.leaderNode = leaderNode
 	cluster.lastLeaderChangedAt = time.Now().UTC()
+	cluster.replMgr.log.Println("Leader node added to the cluster", leaderNode)
 
 	return
 }
@@ -131,6 +129,11 @@ func (cluster *Cluster) Update(receivedNodes []*Node) (err error) {
 			log.Printf("unable to add node %d to the cluster", node.ID)
 			continue
 		}
+		if err = cluster.AddLeaderNode(node); err != nil {
+			log.Printf("unable to add leader node %d to the cluster", node.ID)
+			continue
+		}
+
 	}
 	return
 }
