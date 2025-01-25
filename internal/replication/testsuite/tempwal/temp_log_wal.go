@@ -43,7 +43,6 @@ func (logWal *LogTempWAL) GetLogsAfterIndex(index replication.LogIndex, limit in
 }
 
 func (logWal *LogTempWAL) ApplyLogs(logs []replication.WALLog) (err error) {
-	logWal.walLogs = append(logWal.walLogs, logs...)
 	return
 }
 
@@ -59,11 +58,11 @@ func (logWal *LogTempWAL) PushData() (err error) {
 			// Generate random log entries
 			logs := make([]replication.WALLog, 0)
 			for i := 0; i < 10; i++ {
-				logWal.currIdx += 1
 				logs = append(logs, replication.WALLog{
 					Index: logWal.currIdx,
-					Value: []byte("Log content " + strconv.Itoa(i)),
+					Value: []byte("Log content " + strconv.Itoa(int(logWal.currIdx))),
 				})
+				logWal.currIdx += 1
 			}
 			logWal.walLogs = append(logWal.walLogs, logs...)
 		}

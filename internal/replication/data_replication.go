@@ -83,26 +83,25 @@ func (drMgr *DataReplicationManager) getCurrentLogIndexFromLogs(logs []WALLog) (
 
 func (drMgr *DataReplicationManager) DataReplicationPullHandler(reqMsg *Message) (respMsg *Message, err error) {
 	var (
-		dataReplicationPushReq *DataReplicationPushRequestMsg
+		dataReplicationPullReq *DataReplicationPullRequestMsg
 		walLogs                []WALLog
 	)
-	dataReplicationPushReq = &DataReplicationPushRequestMsg{}
+	dataReplicationPullReq = &DataReplicationPullRequestMsg{}
 	// Receive the wal logs
-	if err = reqMsg.FillValue(dataReplicationPushReq); err != nil {
+	if err = reqMsg.FillValue(dataReplicationPullReq); err != nil {
 		return
 	}
-	drMgr.replMgr.log.Println("Received data from remote node", len(dataReplicationPushReq.WALLogs), dataReplicationPushReq.CurrLogIndex, reqMsg.Local)
-	if walLogs, err = drMgr.wal.GetLogsAfterIndex(dataReplicationPushReq.CurrLogIndex, 10); err != nil {
+	if walLogs, err = drMgr.wal.GetLogsAfterIndex(dataReplicationPullReq.CurrLogIndex, 10); err != nil {
 		return
 	}
 	// Send the current log index back to the remote node
 	respMsg = NewMessage(
 		InfoMessageGroup,
-		DataReplicationPushMessageType,
+		DataReplicationPullMessageType,
 		drMgr.replMgr.localNode.GetLocalUser(),
 		reqMsg.Local,
 		&DataReplicationPullResponseMsg{
-			CurrLogIndex: drMgr.getCurrentLogIndexFromLogs(dataReplicationPushReq.WALLogs),
+			CurrLogIndex: drMgr.getCurrentLogIndexFromLogs(walLogs),
 			WALLogs:      walLogs,
 		},
 	)
@@ -253,17 +252,17 @@ func (drMgr *DataReplicationManager) pollLeaderForWAL() (err error) {
 		reqMsg     *Message
 		respMsg    *Message
 		leaderNode *Node
-		pullResp   *DataReplicationPushRequestMsg
+		pullResp   *DataReplicationPullResponseMsg
 	)
 	if leaderNode, err = drMgr.replMgr.cluster.GetLeaderNode(); err != nil {
 		return
 	}
 	reqMsg = NewMessage(
 		InfoMessageGroup,
-		DataReplicationPushMessageType,
+		DataReplicationPullMessageType,
 		drMgr.replMgr.localNode.GetLocalUser(),
 		leaderNode.GetLocalUser(),
-		&DataReplicationPushResponseMsg{
+		&DataReplicationPullRequestMsg{
 			CurrLogIndex: drMgr.currLogIndex,
 		},
 	)
@@ -271,14 +270,18 @@ func (drMgr *DataReplicationManager) pollLeaderForWAL() (err error) {
 		drMgr.replMgr.log.Println("Error sending data to remote node", err)
 		return
 	}
-	drMgr.replMgr.log.Println("pulling data from leader node", leaderNode, drMgr.currLogIndex)
-	pullResp = &DataReplicationPushRequestMsg{}
+	pullResp = &DataReplicationPullResponseMsg{}
 	if err = respMsg.FillValue(pullResp); err != nil {
+		return
+	}
+	if len(pullResp.WALLogs) == 0 {
+		err = fmt.Errorf(LogsWithIndexNotAvailableError)
 		return
 	}
 	if err = drMgr.PersistLocally(pullResp.WALLogs); err != nil {
 		return
 	}
+	drMgr.replMgr.log.Println("Received data request from follower node", len(pullResp.WALLogs), drMgr.currLogIndex)
 	return
 }
 
