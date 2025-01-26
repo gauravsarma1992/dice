@@ -17,6 +17,9 @@ const (
 	WriteConcernMajority WriteConcernT = WriteConcernT(0)
 	WriteConcernOne      WriteConcernT = WriteConcernT(1)
 	WriteConcernNone     WriteConcernT = WriteConcernT(2)
+
+	// DataReplicationManager
+	LogBatchSize = 1000
 )
 
 type (
@@ -32,6 +35,7 @@ type (
 		writeConcern WriteConcernT
 
 		shouldLeaderPushLogs bool
+		lastFetchedDataAt    time.Time
 	}
 
 	DataReplicationPushRequestMsg struct {
@@ -55,15 +59,16 @@ func NewDataReplicationManager(ctx context.Context, wal ReplicationWAL) (drMgr *
 	drMgr = &DataReplicationManager{
 		ctx:                  ctx,
 		wal:                  wal,
-		writeConcern:         WriteConcernNone,
-		shouldLeaderPushLogs: false,
+		writeConcern:         WriteConcernOne,
+		shouldLeaderPushLogs: true,
 	}
 	drMgr.replMgr = ctx.Value(ReplicationManagerInContext).(*ReplicationManager)
 	return
 }
 
 func (drMgr *DataReplicationManager) PersistLocally(logs []WALLog) (err error) {
-	if err = drMgr.wal.ApplyLogs(logs); err != nil {
+	// TODO: Check if the logs are of the right index
+	if err = drMgr.wal.Commit(logs); err != nil {
 		return
 	}
 	if drMgr.updateCurrLogIndex(drMgr.getCurrentLogIndexFromLogs(logs)); err != nil {
@@ -91,7 +96,7 @@ func (drMgr *DataReplicationManager) DataReplicationPullHandler(reqMsg *Message)
 	if err = reqMsg.FillValue(dataReplicationPullReq); err != nil {
 		return
 	}
-	if walLogs, err = drMgr.wal.GetLogsAfterIndex(dataReplicationPullReq.CurrLogIndex, 10); err != nil {
+	if walLogs, err = drMgr.wal.GetLogsAfterIndex(dataReplicationPullReq.CurrLogIndex, LogBatchSize); err != nil {
 		return
 	}
 	// Send the current log index back to the remote node
@@ -121,6 +126,7 @@ func (drMgr *DataReplicationManager) DataReplicationPushHandler(reqMsg *Message)
 	if err = drMgr.PersistLocally(dataReplicationPushReq.WALLogs); err != nil {
 		return
 	}
+	drMgr.lastFetchedDataAt = time.Now().UTC()
 	drMgr.replMgr.log.Println("Received data from remote node", len(dataReplicationPushReq.WALLogs), dataReplicationPushReq.CurrLogIndex, reqMsg.Local)
 	// Send the current log index back to the remote node
 	respMsg = NewMessage(
@@ -166,18 +172,18 @@ func (drMgr *DataReplicationManager) replicateToNode(node *Node, walLogs []WALLo
 	return
 }
 
-func (drMgr *DataReplicationManager) handleWriteConcerns(errCount int) (err error) {
+func (drMgr *DataReplicationManager) shouldWaitForRemoteNode(replicatedCount int) (err error) {
 	switch drMgr.writeConcern {
 	case WriteConcernNone:
 		err = nil
 		return
 	case WriteConcernOne:
-		if errCount == 1 {
+		if replicatedCount == 1 {
 			err = nil
 			return
 		}
 	case WriteConcernMajority:
-		if errCount > len(drMgr.replMgr.cluster.GetRemoteNodes())/2 {
+		if replicatedCount > len(drMgr.replMgr.cluster.GetActiveRemoteNodes())/2 {
 			err = nil
 			return
 		}
@@ -189,21 +195,47 @@ func (drMgr *DataReplicationManager) handleWriteConcerns(errCount int) (err erro
 	return
 }
 
-// TODO: make this async
 func (drMgr *DataReplicationManager) replicateToRemoteNodes(walLogs []WALLog) (err error) {
 	var (
 		errCount int
+		waitCh   chan int
 	)
-	for _, node := range drMgr.replMgr.cluster.GetRemoteNodes() {
-		drMgr.replMgr.log.Println("Replicating data to remote node", node, len(walLogs))
-		if err = drMgr.replicateToNode(node, walLogs); err != nil {
-			errCount += 1
-			drMgr.replMgr.log.Println("Error replicating data to remote node", err)
-			continue
-		}
-	}
-	if err = drMgr.handleWriteConcerns(errCount); err != nil {
+	waitCh = make(chan int, 10)
+	defer close(waitCh)
+
+	if len(drMgr.replMgr.cluster.GetActiveRemoteNodes()) == 0 {
 		return
+	}
+	for _, node := range drMgr.replMgr.cluster.GetActiveRemoteNodes() {
+		go func(waitCh chan int, node *Node, walLogs []WALLog) {
+			defer func() {
+				recover()
+			}()
+
+			replicatedCount := 0
+
+			if err = drMgr.replicateToNode(node, walLogs); err != nil {
+				drMgr.replMgr.log.Println("Error replicating data to remote node", err)
+			} else {
+				replicatedCount = 1
+			}
+
+			waitCh <- replicatedCount
+		}(waitCh, node, walLogs)
+	}
+	for {
+		select {
+		// Wait till the data is replicated to the node count depending on the write concern
+		case replicatedCount := <-waitCh:
+			errCount += replicatedCount
+			if err = drMgr.shouldWaitForRemoteNode(errCount); err != nil {
+				// Write concern not satisfied
+				continue
+			}
+			// Write concern satisfied
+			err = nil
+			return
+		}
 	}
 	return
 }
@@ -229,14 +261,14 @@ func (drMgr *DataReplicationManager) pollLocalWAL() (err error) {
 	var (
 		walLogs []WALLog
 	)
-	if walLogs, err = drMgr.wal.GetLogsAfterIndex(drMgr.currLogIndex, 10); err != nil {
+	if walLogs, err = drMgr.wal.GetLogsAfterIndex(drMgr.currLogIndex, LogBatchSize); err != nil {
 		return
 	}
 	if len(walLogs) == 0 {
 		err = fmt.Errorf(EmptyWALBufferError)
 		return
 	}
-	//log.Println("Polling local wal data", len(walLogs))
+	//drMgr.replMgr.log.Println("Polling local wal data", len(walLogs))
 	if err = drMgr.Replicate(walLogs); err != nil {
 		drMgr.replMgr.log.Println("Error replicating data", err)
 		return
@@ -281,7 +313,7 @@ func (drMgr *DataReplicationManager) pollLeaderForWAL() (err error) {
 	if err = drMgr.PersistLocally(pullResp.WALLogs); err != nil {
 		return
 	}
-	drMgr.replMgr.log.Println("Received data request from follower node", len(pullResp.WALLogs), drMgr.currLogIndex)
+	//drMgr.replMgr.log.Println("Received data request from follower node", len(pullResp.WALLogs), drMgr.currLogIndex)
 	return
 }
 
@@ -296,8 +328,13 @@ func (drMgr *DataReplicationManager) startPollingForLeaderNode() (err error) {
 
 func (drMgr *DataReplicationManager) startPollingForFollowerNode() (err error) {
 	for {
+		if time.Since(drMgr.lastFetchedDataAt) > 15*time.Second {
+			time.Sleep(5 * time.Second)
+			continue
+		}
 		if err = drMgr.pollLeaderForWAL(); err != nil {
 			time.Sleep(5 * time.Second)
+			continue
 		}
 	}
 	return

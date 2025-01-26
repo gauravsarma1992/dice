@@ -47,6 +47,10 @@ func NewElectionManager(ctx context.Context) (electionMgr *ElectionManager, err 
 	return
 }
 
+func (electionMgr *ElectionManager) triggerElection() (err error) {
+	return
+}
+
 func (electionMgr *ElectionManager) Start() (err error) {
 	return
 }
