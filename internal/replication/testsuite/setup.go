@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"strconv"
-	"time"
 
 	"github.com/dicedb/dice/internal/replication"
 	"github.com/dicedb/dice/internal/replication/testsuite/tempwal"
@@ -78,8 +77,6 @@ func (replSuite *ReplicationTestSuite) createAndRunNodes() (err error) {
 		go func() {
 			replMgr.Run()
 		}()
-
-		time.Sleep(2 * time.Second)
 	}
 	return
 }
