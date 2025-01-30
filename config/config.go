@@ -1,18 +1,5 @@
-// This file is part of DiceDB.
-// Copyright (C) 2024 DiceDB (dicedb.io).
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Affero General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Affero General Public License for more details.
-//
-// You should have received a copy of the GNU Affero General Public License
-// along with this program. If not, see <https://www.gnu.org/licenses/>.
+// Copyright (c) 2022-present, DiceDB contributors
+// All rights reserved. Licensed under the BSD 3-Clause License. See LICENSE file in the project root for full license information.
 
 package config
 
@@ -104,7 +91,7 @@ network.io_buffer_length_max = 51200
 
 # WAL Configuration
 LogDir = "tmp/dicedb-wal"
-Enabled = "true"
+Enabled = "false"
 WalMode = "buffered"
 WriteMode = "default"
 BufferSizeMB = 1
@@ -115,7 +102,9 @@ BufferSyncInterval = 200ms
 RetentionMode = "num-segments" 
 MaxSegmentCount = 10
 MaxSegmentRetentionDuration = 600s
-RecoveryMode = "strict"`
+RecoveryMode = "strict"
+RestoreFromWAL = "false"
+WriteToWALOnCleanup = "false"`
 )
 
 var (
@@ -132,7 +121,6 @@ type Config struct {
 	WebSocket   websocket   `config:"websocket"`
 	Performance performance `config:"performance"`
 	Memory      memory      `config:"memory"`
-	Persistence persistence `config:"persistence"`
 	Logging     logging     `config:"logging"`
 	Network     network     `config:"network"`
 	WAL         WALConfig   `config:"WAL"`
@@ -183,14 +171,6 @@ type memory struct {
 	LFULogFactor   int     `config:"lfu_log_factor" default:"10" validate:"min=0"`
 }
 
-type persistence struct {
-	Enabled           bool   `config:"enabled" default:"false"`
-	AOFFile           string `config:"aof_file" default:"./dice-master.aof" validate:"filepath"`
-	WriteAOFOnCleanup bool   `config:"write_aof_on_cleanup" default:"false"`
-	RestoreFromWAL    bool   `config:"restore-wal" default:"false"`
-	WALEngine         string `config:"wal-engine" default:"aof" validate:"oneof=sqlite aof"`
-}
-
 type WALConfig struct {
 	// Directory where WAL log files will be stored
 	LogDir string `config:"log_dir" default:"tmp/dicedb-wal"`
@@ -218,6 +198,10 @@ type WALConfig struct {
 	MaxSegmentRetentionDuration time.Duration `config:"max_segment_retention_duration" default:"600s" validate:"min=1s"`
 	// How to handle WAL corruption on recovery: 'strict' (fail), 'truncate' (truncate at corruption), 'ignore' (skip corrupted)
 	RecoveryMode string `config:"recovery_mode" default:"strict" validate:"oneof=strict truncate ignore"`
+	// Whether to restore the database from WAL on startup
+	RestoreFromWAL bool `config:"restore-wal" default:"true"`
+	// Whether to write to WAL on cleanup
+	WriteToWALOnCleanup bool `config:"write-to-wal-on-cleanup" default:"false"`
 }
 
 type logging struct {
@@ -316,12 +300,10 @@ func MergeFlags(flags *Config) {
 			DiceConfig.Logging.LogLevel = flags.Logging.LogLevel
 		case "log-dir":
 			DiceConfig.Logging.LogDir = flags.Logging.LogDir
-		case "enable-persistence":
-			DiceConfig.Persistence.Enabled = flags.Persistence.Enabled
+		case "enable-wal":
+			DiceConfig.WAL.Enabled = flags.WAL.Enabled
 		case "restore-from-wal":
-			DiceConfig.Persistence.RestoreFromWAL = flags.Persistence.RestoreFromWAL
-		case "wal-engine":
-			DiceConfig.Persistence.WALEngine = flags.Persistence.WALEngine
+			DiceConfig.WAL.RestoreFromWAL = flags.WAL.RestoreFromWAL
 		case "require-pass":
 			DiceConfig.Auth.Password = flags.Auth.Password
 		case "keys-limit":

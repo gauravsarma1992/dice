@@ -1,18 +1,5 @@
-// This file is part of DiceDB.
-// Copyright (C) 2024 DiceDB (dicedb.io).
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Affero General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Affero General Public License for more details.
-//
-// You should have received a copy of the GNU Affero General Public License
-// along with this program. If not, see <https://www.gnu.org/licenses/>.
+// Copyright (c) 2022-present, DiceDB contributors
+// All rights reserved. Licensed under the BSD 3-Clause License. See LICENSE file in the project root for full license information.
 
 package cli
 
@@ -66,7 +53,7 @@ func printConfiguration() {
 	slog.Info("running with", slog.Bool("profiling", config.DiceConfig.Performance.EnableProfiling))
 
 	// Add whether the persistence feature is enabled
-	slog.Info("running with", slog.Bool("persistence", config.DiceConfig.Persistence.Enabled))
+	slog.Info("running with", slog.Bool("wal-enabled", config.DiceConfig.WAL.Enabled))
 }
 
 // printConfigTable prints key-value pairs in a vertical table format.
@@ -103,9 +90,8 @@ func Execute() {
 	flag.StringVar(&flagsConfig.Logging.LogLevel, "log-level", "info", "log level, values: info, debug")
 	flag.StringVar(&config.DiceConfig.Logging.LogDir, "log-dir", "/tmp/dicedb", "log directory path")
 
-	flag.BoolVar(&flagsConfig.Persistence.Enabled, "enable-persistence", false, "enable write-ahead logging")
-	flag.BoolVar(&flagsConfig.Persistence.RestoreFromWAL, "restore-wal", false, "restore the database from the WAL files")
-	flag.StringVar(&flagsConfig.Persistence.WALEngine, "wal-engine", "null", "wal engine to use, values: sqlite, aof")
+	flag.BoolVar(&flagsConfig.WAL.Enabled, "enable-persistence", false, "enable write-ahead logging")
+	flag.BoolVar(&flagsConfig.WAL.RestoreFromWAL, "restore-wal", false, "restore the database from the WAL files")
 
 	flag.StringVar(&flagsConfig.Auth.Password, "requirepass", utils.EmptyStr, "enable authentication for the default user")
 	flag.StringVar(&config.CustomConfigFilePath, "o", config.CustomConfigFilePath, "dir path to create the flagsConfig file")
