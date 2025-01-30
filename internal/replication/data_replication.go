@@ -277,7 +277,7 @@ func (drMgr *DataReplicationManager) pollLocalWAL() (err error) {
 		err = fmt.Errorf(EmptyWALBufferError)
 		return
 	}
-	//drMgr.replMgr.log.Println("Polling local wal data", len(walLogs))
+	drMgr.replMgr.log.Println("Polling local wal data", len(walLogs))
 	if err = drMgr.Replicate(walLogs); err != nil {
 		drMgr.replMgr.log.Println("Error replicating data", err)
 		return
@@ -350,26 +350,30 @@ func (drMgr *DataReplicationManager) startPollingForFollowerNode() (err error) {
 	return
 }
 
-func (drMgr *DataReplicationManager) Start() (err error) {
+func (drMgr *DataReplicationManager) startPolling() (err error) {
 	for {
 		select {
 		case <-drMgr.ctx.Done():
 			return
 		default:
-
-			if drMgr.replMgr.localNode.NodeType == NodeTypeLeader {
+			if drMgr.replMgr.localNode.GetNodeType() == NodeTypeLeader {
 				err = drMgr.startPollingForLeaderNode()
 			} else {
 				err = drMgr.startPollingForFollowerNode()
 			}
 			if err != nil {
 				if err.Error() == EmptyWALBufferError {
-					continue
+					return
 				}
 				drMgr.replMgr.log.Println("Error in data replication manager", err)
-				continue
+				return
 			}
 		}
 	}
+	return
+}
+
+func (drMgr *DataReplicationManager) Start() (err error) {
+	go drMgr.startPolling()
 	return
 }

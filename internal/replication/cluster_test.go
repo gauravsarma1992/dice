@@ -112,7 +112,7 @@ func TestClusterRemoveNode(t *testing.T) {
 	node := &Node{ID: 2}
 	tc.cluster.nodes[node.ID] = node
 
-	err := tc.cluster.RemoveNode(node)
+	err := tc.cluster.RemoveNode(node.ID)
 	if err != nil {
 		t.Errorf("RemoveNode failed: %v", err)
 	}
