@@ -136,7 +136,7 @@ func (drMgr *DataReplicationManager) DataReplicationPushHandler(reqMsg *Message)
 		return
 	}
 	drMgr.lastFetchedDataAt = time.Now().UTC()
-	drMgr.replMgr.log.Println("Received data from remote node", len(dataReplicationPushReq.WALLogs), dataReplicationPushReq.CurrLogIndex, reqMsg.Local)
+	//drMgr.replMgr.log.Println("Received data from remote node", len(dataReplicationPushReq.WALLogs), dataReplicationPushReq.CurrLogIndex, reqMsg.Local.NodeID)
 	// Send the current log index back to the remote node
 	respMsg = NewMessage(
 		InfoMessageGroup,
@@ -277,7 +277,7 @@ func (drMgr *DataReplicationManager) pollLocalWAL() (err error) {
 		err = fmt.Errorf(EmptyWALBufferError)
 		return
 	}
-	drMgr.replMgr.log.Println("Polling local wal data", len(walLogs))
+	//drMgr.replMgr.log.Println("Polling local wal data", len(walLogs))
 	if err = drMgr.Replicate(walLogs); err != nil {
 		drMgr.replMgr.log.Println("Error replicating data", err)
 		return
@@ -296,7 +296,7 @@ func (drMgr *DataReplicationManager) pollLeaderForWAL() (err error) {
 		pullResp   *DataReplicationPullResponseMsg
 	)
 	if time.Since(drMgr.lastFetchedDataAt) < 15*time.Second {
-		// err = fmt.Errorf("Last updated data is less than 15 seconds %s", drMgr.lastFetchedDataAt)
+		err = fmt.Errorf("Last updated data is less than 15 seconds %s", drMgr.lastFetchedDataAt)
 		return
 	}
 	if leaderNode, err = drMgr.replMgr.cluster.GetLeaderNode(); err != nil {
@@ -326,7 +326,7 @@ func (drMgr *DataReplicationManager) pollLeaderForWAL() (err error) {
 	if err = drMgr.PersistLocally(pullResp.WALLogs); err != nil {
 		return
 	}
-	drMgr.replMgr.log.Println("Received data request from follower node", len(pullResp.WALLogs), drMgr.currLogIndex)
+	//drMgr.replMgr.log.Println("Received data request from follower node", len(pullResp.WALLogs), drMgr.currLogIndex)
 	return
 }
 
@@ -363,10 +363,10 @@ func (drMgr *DataReplicationManager) startPolling() (err error) {
 			}
 			if err != nil {
 				if err.Error() == EmptyWALBufferError {
-					return
+					continue
 				}
-				drMgr.replMgr.log.Println("Error in data replication manager", err)
-				return
+				//drMgr.replMgr.log.Println("Error in data replication manager", err)
+				continue
 			}
 		}
 	}

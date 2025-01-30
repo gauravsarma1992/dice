@@ -79,7 +79,7 @@ func (replSuite *ReplicationTestSuite) createAndRunNodes() (err error) {
 		go func() {
 			replMgr.Run()
 		}()
-		time.Sleep(10 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
 	return
 }

@@ -333,7 +333,7 @@ func (electionMgr *ElectionManager) ConductElection() (err error) {
 
 func (electionMgr *ElectionManager) AcceptElection() (err error) {
 
-	electionMgr.replMgr.log.Println("Election accepted for proposed leader node", electionMgr.ongoingElection.ProposedLeaderNode)
+	//electionMgr.replMgr.log.Println("Election accepted for proposed leader node", electionMgr.ongoingElection.ProposedLeaderNode)
 
 	// Complete the ongoing election to current election
 	// This ensures the termID is also updated
